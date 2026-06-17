@@ -23,7 +23,9 @@ export async function loadDashboardState(query = '') {
 
   const {
     latest,
+    state,
     mt5Snapshot,
+    secondaryMt5Snapshot,
     governance,
     backtest,
     paramStatus,
@@ -56,7 +58,9 @@ export async function loadDashboardState(query = '') {
     manualAlphaRows,
   } = await loadLegacyDashboardEntries([
     ['latest', () => fetchJson('/api/latest')],
+    ['state', () => fetchJson('/api/dashboard/state')],
     ['mt5Snapshot', () => fetchJson('/api/mt5-readonly/snapshot')],
+    ['secondaryMt5Snapshot', () => fetchJson('/api/mt5-readonly-secondary/snapshot')],
     ['governance', () => fetchJson('/api/governance/advisor')],
     ['backtest', () => fetchJson('/api/dashboard/backtest-summary')],
     ['paramStatus', () => fetchJson('/api/paramlab/status')],
@@ -92,7 +96,9 @@ export async function loadDashboardState(query = '') {
   return {
     mt5: {
       latest,
+      state,
       snapshot: mt5Snapshot,
+      secondarySnapshot: secondaryMt5Snapshot,
       governance,
       backtest,
       paramStatus,

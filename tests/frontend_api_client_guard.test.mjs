@@ -68,6 +68,13 @@ export { fetchJson, fetchRows, postJson, rowsFromPayload };
   for (const servicePath of fixtureServicePaths) {
     const target = path.join(root, servicePath);
     if (fs.existsSync(target)) continue;
+    if (servicePath === 'src/services/api.js') {
+      fs.writeFileSync(
+        target,
+        "import { fetchJson } from './apiClient.js';\nasync function loadLegacyDashboardEntries(entries) { const results = {}; for (const [key, loadEntry] of entries) { results[key] = await loadEntry(); } return results; }\nexport async function loadDashboardState() { const { latest, state, mt5Snapshot, secondaryMt5Snapshot } = await loadLegacyDashboardEntries([['latest', () => fetchJson('/api/latest')], ['state', () => fetchJson('/api/dashboard/state')], ['mt5Snapshot', () => fetchJson('/api/mt5-readonly/snapshot')], ['secondaryMt5Snapshot', () => fetchJson('/api/mt5-readonly-secondary/snapshot')]]); return { mt5: { latest, state, snapshot: mt5Snapshot, secondarySnapshot: secondaryMt5Snapshot } }; }\n",
+      );
+      continue;
+    }
     if (servicePath === 'src/services/backtestAiApi.js') {
       fs.writeFileSync(
         target,

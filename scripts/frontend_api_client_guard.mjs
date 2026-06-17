@@ -207,6 +207,16 @@ if (
 ) {
   fail('src/services/api.js loadDashboardState must use per-endpoint fallback loading');
 }
+for (const marker of [
+  '/api/dashboard/state',
+  '/api/mt5-readonly-secondary/snapshot',
+  'secondaryMt5Snapshot',
+  'secondarySnapshot: secondaryMt5Snapshot',
+]) {
+  if (!legacyApiSource.includes(marker)) {
+    fail(`src/services/api.js legacy dashboard loader must keep whole-frontend freshness marker: ${marker}`);
+  }
+}
 if (
   /const\s*\[[\s\S]*?\]\s*=\s*await\s*Promise\.all\s*\(\s*\[/.test(legacyApiSource) ||
   /return\s+Promise\.all\s*\(\s*\[/.test(legacyApiSource)
