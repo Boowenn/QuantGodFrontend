@@ -11,7 +11,6 @@ The current UI is centered on QuantGod v2.5:
 ```text
 Live Lane: USDJPYc / RSI_Reversal / LONG / cent account
 MT5 Shadow Lane: USDJPY multi-strategy simulation and ranking
-HFM Crypto CFD Shadow Lane: symbol discovery plus Moss backtest profile import
 Agent: autonomous daily todo, daily review, promotion, demotion, rollback
 ```
 
@@ -19,14 +18,14 @@ The interface is an operator workbench: dense, Chinese-first, evidence-first, an
 
 ## Repository Role
 
-| Area             | Path                             | Responsibility                                                                                    |
-| ---------------- | -------------------------------- | ------------------------------------------------------------------------------------------------- |
-| App shell        | `src/app/`                       | Workspace registry, navigation, command surface                                                   |
-| Workspaces       | `src/workspaces/`                | Dashboard, MT5, Evolution, HFM Crypto; legacy workspaces are archived outside the main navigation |
-| Components       | `src/components/`                | Shared panels, KPI cards, automation and USDJPY Agent panels                                      |
-| Services         | `src/services/`                  | `/api/*` client modules                                                                           |
-| Styling          | `src/styles*.css`, `src/styles/` | Theme tokens, responsive hardening, workbench layout                                              |
-| Guards and tests | `scripts/`, `tests/`             | Contract, boundary, responsive, and workspace checks                                              |
+| Area             | Path                             | Responsibility                                                                        |
+| ---------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
+| App shell        | `src/app/`                       | Workspace registry, navigation, command surface                                       |
+| Workspaces       | `src/workspaces/`                | Dashboard, MT5, Evolution; legacy workspaces are archived outside the main navigation |
+| Components       | `src/components/`                | Shared panels, KPI cards, automation and USDJPY Agent panels                          |
+| Services         | `src/services/`                  | `/api/*` client modules                                                               |
+| Styling          | `src/styles*.css`, `src/styles/` | Theme tokens, responsive hardening, workbench layout                                  |
+| Guards and tests | `scripts/`, `tests/`             | Contract, boundary, responsive, and workspace checks                                  |
 
 Related repositories:
 
@@ -61,20 +60,19 @@ Vite proxies `/api/*` to `QG_BACKEND_URL`, defaulting to `http://127.0.0.1:8080`
 
 ## Main Workspaces
 
-| Workspace  | Purpose                                                                                           |
-| ---------- | ------------------------------------------------------------------------------------------------- |
-| Dashboard  | System summary, USDJPY live-loop truth, Agent status, automation chain details                    |
-| MT5        | EA recovery state, RSI entry diagnostics, positions, orders, trades, runtime blockers             |
-| Evolution  | Dataset, causal replay, walk-forward, backtest, Strategy JSON, GA, Case Memory, daily todo/review |
-| HFM Crypto | Crypto CFD symbol discovery, Moss backtest profile import, shadow-only risk boundary             |
+| Workspace | Purpose                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| Dashboard | System summary, USDJPY live-loop truth, Agent status, automation chain details                    |
+| MT5       | EA recovery state, RSI entry diagnostics, positions, orders, trades, runtime blockers             |
+| Evolution | Dataset, causal replay, walk-forward, backtest, Strategy JSON, GA, Case Memory, daily todo/review |
 
-The main navigation intentionally contains only these four workspaces. Older Phase,
+The main navigation intentionally contains only these three workspaces. Older Phase,
 Governance, ParamLab, Research, and Backtest-AI surfaces remain as archived source
 modules for compatibility and tests, but they are not operator entry points.
 
 The MT5 page should answer the most important operational question first: why the EA is or is not acting now.
 
-## Build and Sync
+## Build and Serve Locally
 
 ```bash
 cd /Users/bowen/Desktop/Quard/QuantGodFrontend
@@ -126,10 +124,10 @@ npm run responsive:check
 
 - Chinese-first operating language.
 - Natural-language labels instead of backend endpoint names.
-- No Quick Trade, no wallet connection, no Telegram command UI.
+- No Quick Trade or Telegram command UI.
 - No direct `QuantGod_*.json` or CSV reads from the browser.
 - No text overflow, collapsed tables, or card-in-card layout.
-- Financial numbers should use consistent units and explain whether they are R, pips, USC, or simulated USDC.
+- Financial numbers should use consistent units and explain whether they are R, pips, USC, or simulated account units.
 - Strategy JSON, GA Evolution, and Telegram Gateway must be shown as next-phase tasks unless implemented.
 
 ## Safety Contract
@@ -138,7 +136,6 @@ Frontend may display:
 
 - Live Lane status.
 - MT5 Shadow Lane rankings.
-- HFM Crypto CFD Shadow Lane status.
 - Agent patch evidence.
 - Autonomous rollback and daily review results.
 
@@ -148,7 +145,6 @@ Frontend must not:
 - Close or cancel positions.
 - Modify MT5 live presets.
 - Store or reveal credentials.
-- Add HFM Crypto live execution before a separate design review.
 - Let DeepSeek override hard gates.
 
 ## Design Notes

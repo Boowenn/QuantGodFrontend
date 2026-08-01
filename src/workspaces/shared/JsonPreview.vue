@@ -10,6 +10,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import { redactSensitiveEvidence } from '../../utils/redactSensitiveEvidence.js';
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -25,12 +26,13 @@ const sourceLabel = computed(() => {
 
 const formatted = computed(() => {
   let text;
-  if (props.payload === null || props.payload === undefined) {
+  const payload = redactSensitiveEvidence(props.payload);
+  if (payload === null || payload === undefined) {
     text = 'No data';
-  } else if (typeof props.payload === 'string') {
-    text = props.payload;
+  } else if (typeof payload === 'string') {
+    text = payload;
   } else {
-    text = JSON.stringify(props.payload, null, 2);
+    text = JSON.stringify(payload, null, 2);
   }
 
   const maxChars = Number(props.maxChars);

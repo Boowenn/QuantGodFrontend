@@ -48,3 +48,9 @@ test('USDJPY Strategy Lab POST calls preserve focus symbol and CSRF guard header
   assert.equal(calls[0].options.headers['X-QuantGod-Local'], '1');
   assert.deepEqual(JSON.parse(calls[0].options.body), { focusSymbol: 'USDJPYc' });
 });
+
+test('USDJPY Strategy Lab commands reject HTTP 200 payloads without ok=true', async () => {
+  globalThis.fetch = async () => jsonResponse({ ok: false, error: 'risk_gate_rejected' });
+
+  await assert.rejects(runUSDJPYLiveLoop(), /risk_gate_rejected/);
+});

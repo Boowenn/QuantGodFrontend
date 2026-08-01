@@ -2,15 +2,15 @@
   <section class="qg-automation-chain-panel" aria-label="自动化链路状态">
     <header class="qg-automation-chain-panel__header">
       <div>
-        <p class="qg-automation-chain-panel__eyebrow">USDJPY 实盘 EA 恢复状态</p>
-        <h2>USDJPY 实盘 EA 恢复状态</h2>
+        <p class="qg-automation-chain-panel__eyebrow">USDJPY Shadow / ReadOnly</p>
+        <h2>USDJPY 只读守门证据</h2>
         <p class="qg-automation-chain-panel__subtitle">
-          读取 USDJPY 策略政策、EA 干跑和实盘恢复闭环，告诉你现有 EA 能不能继续等 RSI 买入信号。
+          读取 USDJPY 策略政策与 EA 影子观察证据；这里只生成建议，不存在自动执行通道。
         </p>
       </div>
       <div class="qg-automation-chain-panel__actions">
         <button type="button" @click="loadStatus" :disabled="loading">Agent 刷新证据</button>
-        <button type="button" class="primary" @click="runOnce" :disabled="running">Agent 生成恢复证据</button>
+        <button type="button" class="primary" @click="runOnce" :disabled="running">Agent 生成只读证据</button>
       </div>
     </header>
 
@@ -33,14 +33,14 @@
       <div class="qg-automation-chain-panel__summary">
         <div>
           <span>结论</span>
-          <strong :class="stateClass">{{ payload.stateZh || payload.state || '未知' }}</strong>
+          <strong :class="stateClass">{{ advisoryStateLabel }}</strong>
         </div>
         <div>
-          <span>标准入场</span>
+          <span>标准信号</span>
           <strong>{{ payload.standardCount || 0 }}</strong>
         </div>
         <div>
-          <span>机会入场</span>
+          <span>机会信号</span>
           <strong>{{ payload.opportunityCount || 0 }}</strong>
         </div>
         <div>
@@ -48,7 +48,7 @@
           <strong>{{ payload.blockedCount || 0 }}</strong>
         </div>
         <div>
-          <span>复核就绪</span>
+          <span>证据完整度</span>
           <strong :class="entryReadinessTone">{{ entryReadinessScoreLabel }}</strong>
         </div>
       </div>
@@ -57,25 +57,25 @@
         <article>
           <span>主状态来源</span>
           <strong>{{ payload.singleSourceOfTruth || 'USDJPY_LIVE_LOOP' }}</strong>
-          <small>页面、Telegram 和 EA 干跑统一读取 USDJPY Live Loop</small>
+          <small>页面、Telegram 和 EA 影子观察统一读取 Shadow Advisory（兼容 Live Loop）</small>
         </article>
         <article>
-          <span>实盘候选</span>
+          <span>Shadow 候选</span>
           <strong>{{ livePolicyLabel }}</strong>
-          <small>只有 RSI_Reversal 买入路线可进入恢复复核</small>
+          <small>候选路线以后端证据为准；缺失时保持阻断</small>
         </article>
         <article>
           <span>影子第一名</span>
           <strong>{{ shadowPolicyLabel }}</strong>
-          <small>影子研究不会抢占实盘恢复路线</small>
+          <small>影子研究只用于观察，不会触发执行</small>
         </article>
         <article>
-          <span>EA 干跑</span>
+          <span>EA 影子观察</span>
           <strong>{{ dryRunLabel }}</strong>
-          <small>干跑只验证政策读取，不代表工具下单</small>
+          <small>只验证政策读取并生成建议，不会触发 broker mutation</small>
         </article>
         <article>
-          <span>入场慢点</span>
+          <span>信号延迟</span>
           <strong>{{ entryLatencyLabel }}</strong>
           <small>{{ entryLatencyNextAction || entryLatencyReason }}</small>
         </article>
@@ -126,14 +126,14 @@
           </ul>
         </article>
         <article>
-          <h3>入场延迟时间线</h3>
+          <h3>信号评估时间线</h3>
           <ul class="qg-automation-chain-panel__plain-list">
             <li v-for="item in entryLatencyTimeline" :key="item.stage || item.labelZh">
               <span :class="latencyTone(item)">{{ item.statusZh || item.status }}</span>
               {{ item.labelZh || item.stage }}
               <small>{{ item.reasonZh || '' }}</small>
             </li>
-            <li v-if="!entryLatencyTimeline.length">暂无入场延迟归因</li>
+            <li v-if="!entryLatencyTimeline.length">暂无信号延迟归因</li>
           </ul>
         </article>
         <article>
@@ -161,14 +161,14 @@
           </ul>
         </article>
         <article>
-          <h3>机会入场</h3>
+          <h3>机会信号（只读）</h3>
           <ul class="qg-automation-chain-panel__plain-list">
             <li v-for="item in opportunities" :key="`${item.symbol}-${item.direction}`">
               {{ item.symbol }}｜{{ item.directionZh || item.direction }}｜{{
                 item.entryModeZh || item.entryMode
               }}｜建议仓位 {{ item.recommendedLot || 0 }}
             </li>
-            <li v-if="!opportunities.length">暂无机会入场</li>
+            <li v-if="!opportunities.length">暂无机会信号</li>
           </ul>
         </article>
       </div>
@@ -190,8 +190,15 @@ const steps = computed(() => payload.value.steps || []);
 const missingEvidence = computed(() => payload.value.missingEvidence || []);
 const blockedReasons = computed(() => payload.value.blockedReasons || []);
 const opportunities = computed(() => payload.value.policySummary?.opportunities || []);
-const topLive = computed(
-  () => payload.value.topLiveEligiblePolicy || payload.value.liveLoopStatus?.topLiveEligiblePolicy || {},
+const topAdvisory = computed(
+  () =>
+    payload.value.topAdvisoryPolicy ||
+    payload.value.topShadowPolicy ||
+    payload.value.liveLoopStatus?.topAdvisoryPolicy ||
+    payload.value.liveLoopStatus?.topShadowPolicy ||
+    payload.value.topLiveEligiblePolicy ||
+    payload.value.liveLoopStatus?.topLiveEligiblePolicy ||
+    {},
 );
 const topShadow = computed(
   () => payload.value.topShadowPolicy || payload.value.liveLoopStatus?.topShadowPolicy || {},
@@ -200,9 +207,13 @@ const dryRun = computed(() => payload.value.dryRunDecision || payload.value.live
 const entryLatency = computed(() => payload.value.entryLatencyReport || {});
 const safeIterationPlan = computed(() => payload.value.safeIterationPlan || {});
 const safeIterationActions = computed(() => safeIterationPlan.value.actions || []);
-const gaFactorySummary = computed(() => payload.value.gaFactorySummary || safeIterationPlan.value.gaFactorySummary || {});
+const gaFactorySummary = computed(
+  () => payload.value.gaFactorySummary || safeIterationPlan.value.gaFactorySummary || {},
+);
 const bestGaElite = computed(() => gaFactorySummary.value.bestElite || {});
-const entryLatencySummary = computed(() => payload.value.entryLatencySummary || entryLatency.value.summary || {});
+const entryLatencySummary = computed(
+  () => payload.value.entryLatencySummary || entryLatency.value.summary || {},
+);
 const entryLatencyTimeline = computed(
   () => payload.value.entryLatencyTimeline || entryLatency.value.timeline || [],
 );
@@ -215,22 +226,30 @@ const failedReadinessGaps = computed(() =>
 const entryLatencyNextAction = computed(
   () => entryLatency.value.nextRequiredActionZh || entryLatencySummary.value.nextRequiredActionZh || '',
 );
-const entryReadinessScore = computed(() => entryLatencySummary.value.readinessScore ?? entryReadiness.value.score);
+const entryReadinessScore = computed(
+  () => entryLatencySummary.value.readinessScore ?? entryReadiness.value.score,
+);
 const entryReadinessScoreLabel = computed(() => {
   const score = Number(entryReadinessScore.value);
   if (!Number.isFinite(score)) return '暂无';
   return `${Math.round(score)}%`;
 });
 const entryReadinessTone = computed(() => {
-  if (entryReadiness.value.readyForEntryReview || entryLatencySummary.value.readyForEntryReview) return 'good';
+  if (entryReadiness.value.readyForEntryReview || entryLatencySummary.value.readyForEntryReview)
+    return 'good';
   const score = Number(entryReadinessScore.value);
   if (Number.isFinite(score) && score >= 70) return 'warn';
   return 'bad';
 });
 const firstReadinessGap = computed(() => failedReadinessGaps.value[0] || {});
-const firstReadinessGapLabel = computed(() => firstReadinessGap.value.labelZh || entryReadiness.value.firstFailedLabelZh || '暂无缺口');
+const firstReadinessGapLabel = computed(
+  () => firstReadinessGap.value.labelZh || entryReadiness.value.firstFailedLabelZh || '暂无缺口',
+);
 const firstReadinessGapAction = computed(
-  () => firstReadinessGap.value.nextRequiredActionZh || entryReadiness.value.nextRequiredActionZh || '等待下一次自动化链路刷新。',
+  () =>
+    firstReadinessGap.value.nextRequiredActionZh ||
+    entryReadiness.value.nextRequiredActionZh ||
+    '等待下一次自动化链路刷新。',
 );
 const bestGaEliteLabel = computed(() => {
   const elite = bestGaElite.value || {};
@@ -248,8 +267,8 @@ const gaFactoryMeta = computed(() => {
   return `第 ${generation} 代｜${stage}${nextGen}`;
 });
 const livePolicyLabel = computed(() => {
-  const item = topLive.value || {};
-  if (!item.strategy) return '暂无实盘候选';
+  const item = topAdvisory.value || {};
+  if (!item.strategy) return '暂无 Shadow 候选';
   return `${item.strategy}｜${directionZh(item.direction)}｜${entryModeZh(item.entryMode)}`;
 });
 const shadowPolicyLabel = computed(() => {
@@ -259,18 +278,37 @@ const shadowPolicyLabel = computed(() => {
 });
 const dryRunLabel = computed(() => {
   const item = dryRun.value || {};
-  return item.decision || '暂无干跑结果';
+  return item.decision || '暂无影子观察结果';
 });
-const entryLatencyLabel = computed(() => entryLatencySummary.value.stateZh || entryLatencySummary.value.primaryStage || '暂无归因');
-const entryLatencyReason = computed(() => entryLatencySummary.value.primaryReasonZh || '等待下一次自动化链路生成归因。');
+const entryLatencyLabel = computed(
+  () => entryLatencySummary.value.stateZh || entryLatencySummary.value.primaryStage || '暂无归因',
+);
+const entryLatencyReason = computed(
+  () => entryLatencySummary.value.primaryReasonZh || '等待下一次自动化链路生成归因。',
+);
 const stateClass = computed(() => {
   const state = String(payload.value.state || '');
-  if (state.includes('READY')) return 'good';
+  if (state.includes('READY')) return 'warn';
   if (state.includes('BLOCKED')) return 'bad';
   return 'warn';
 });
+const advisoryStateLabel = computed(() => {
+  const state = String(payload.value.state || '').toUpperCase();
+  if (state === 'SHADOW_ADVISORY_READY') return '影子建议已就绪';
+  if (state === 'READY_FOR_EXISTING_EA') return '影子建议已就绪（旧契约）';
+  return payload.value.stateZh || payload.value.state || '未知';
+});
 
 function unwrap(response) {
+  if (response?._api?.ok === false || response?.endpointLoadFailed === true) {
+    throw new Error(
+      response?.statusZh ||
+        response?.error ||
+        response?.message ||
+        response?._api?.error?.message ||
+        '自动化链路响应未确认成功',
+    );
+  }
   return response?.payload || response || {};
 }
 
@@ -284,8 +322,8 @@ function directionZh(value) {
 function entryModeZh(value) {
   return (
     {
-      STANDARD_ENTRY: '标准入场',
-      OPPORTUNITY_ENTRY: '机会入场',
+      STANDARD_ENTRY: '标准信号',
+      OPPORTUNITY_ENTRY: '机会信号',
       BLOCKED: '阻断',
     }[String(value || '')] || '状态待确认'
   );
@@ -349,7 +387,11 @@ async function loadStatus({ silent = false } = {}) {
   loading.value = true;
   error.value = '';
   if (!silent)
-    setActionStatus('running', 'Agent 正在刷新恢复证据', '正在读取 USDJPY Live Loop、EA 干跑和技术链路。');
+    setActionStatus(
+      'running',
+      'Agent 正在刷新恢复证据',
+      '正在读取 USDJPY Shadow Advisory、EA 影子观察和技术链路。',
+    );
   try {
     payload.value = unwrap(await fetchAutomationChainStatus());
     if (!silent) setActionStatus('success', 'Agent 证据已刷新', statusSummary());

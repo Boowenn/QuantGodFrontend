@@ -1,11 +1,11 @@
-import { fetchJsonOrFallback, postJsonOrFallback } from './apiClient.js';
+import { fetchJsonOrFallback, postCommandJson } from './apiClient.js';
 import { formatDisplayValue, humanizeLabel } from '../utils/displayText.js';
 
 export const PHASE2_ENDPOINTS = Object.freeze({
   governance: [
     ['/api/governance/advisor', '治理建议'],
     ['/api/governance/version-registry', '策略版本登记'],
-    ['/api/governance/promotion-gate', '升实盘闸门'],
+    ['/api/governance/promotion-gate', 'Shadow 研究晋级闸门'],
     ['/api/governance/optimizer-v2', '优化器结果'],
   ],
   paramlab: [
@@ -45,8 +45,8 @@ export async function fetchPhase2Json(url, fallback = null, options = {}) {
   return fetchJsonOrFallback(url, fallback, options);
 }
 
-export async function postPhase2Json(url, payload = {}, fallback = null, options = {}) {
-  return postJsonOrFallback(url, payload, fallback, options);
+export async function postPhase2Json(url, payload = {}, _fallback = null, options = {}) {
+  return postCommandJson(url, payload, options);
 }
 
 export function extractRows(payload) {

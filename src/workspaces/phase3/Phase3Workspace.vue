@@ -5,8 +5,8 @@
         <p class="eyebrow">策略研究 / 只读闭环</p>
         <h2>策略工坊</h2>
         <p class="muted">
-          自然语言生成策略、research-only 回测、AI 多智能体辩论与 K
-          线叠加。任何策略进入实盘前都必须经过回测、ParamLab、Governance、Version Gate 和人工授权。
+          自然语言生成策略、research-only 回测、AI 多智能体辩论与 K 线叠加。所有策略只进入 Shadow / tester
+          研究；回测、ParamLab、Governance 和 Version Gate 只提高证据质量，不能创建 execution lane。
         </p>
       </div>
       <div class="safety-pill">只做研究 · 不改实盘</div>

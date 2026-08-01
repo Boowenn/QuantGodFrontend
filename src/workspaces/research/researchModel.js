@@ -256,7 +256,7 @@ export function buildResearchSafetyEnvelope(overrides = {}) {
       status: statusFromBoolean(safety.credentialStorageAllowed, 'error', 'locked'),
     },
     {
-      label: '修改实盘配置',
+      label: '修改 MT5 preset',
       value: boolLabel(safety.livePresetMutationAllowed),
       status: statusFromBoolean(safety.livePresetMutationAllowed, 'error', 'locked'),
     },
@@ -276,7 +276,7 @@ export function buildResearchSafetyEnvelope(overrides = {}) {
       status: statusFromBoolean(safety.canPromoteOrDemoteRoute, 'error', 'locked'),
     },
     {
-      label: '自动升实盘',
+      label: '创建执行通道',
       value: boolLabel(safety.autoPromotionAllowed),
       status: statusFromBoolean(safety.autoPromotionAllowed, 'error', 'locked'),
     },
@@ -380,17 +380,27 @@ export function buildShadowSummary(state) {
   const outcomeMeta = rowMeta(state.shadowOutcomes);
   const candidateMeta = rowMeta(state.shadowCandidates);
   const blocked = countWhere(signalRows, (row) =>
-    String(firstValue(row, ['SignalStatus', 'status', 'decision', 'ExecutionAction', 'action', 'Blocker', 'blocked'], ''))
+    String(
+      firstValue(
+        row,
+        ['SignalStatus', 'status', 'decision', 'ExecutionAction', 'action', 'Blocker', 'blocked'],
+        '',
+      ),
+    )
       .toLowerCase()
       .includes('block'),
   );
   const buys = countWhere(signalRows, (row) =>
-    String(firstValue(row, ['SignalDirection', 'side', 'direction', 'ExecutionAction', 'action', 'signal'], ''))
+    String(
+      firstValue(row, ['SignalDirection', 'side', 'direction', 'ExecutionAction', 'action', 'signal'], ''),
+    )
       .toUpperCase()
       .includes('BUY'),
   );
   const sells = countWhere(signalRows, (row) =>
-    String(firstValue(row, ['SignalDirection', 'side', 'direction', 'ExecutionAction', 'action', 'signal'], ''))
+    String(
+      firstValue(row, ['SignalDirection', 'side', 'direction', 'ExecutionAction', 'action', 'signal'], ''),
+    )
       .toUpperCase()
       .includes('SELL'),
   );

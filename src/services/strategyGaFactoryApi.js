@@ -1,4 +1,4 @@
-import { fetchJson, postJson } from './apiClient.js';
+import { fetchJson, postCommandJson } from './apiClient.js';
 
 const BASE = '/api/strategy-ga-factory';
 
@@ -7,7 +7,7 @@ export function fetchStrategyGaFactoryStatus(options = {}) {
 }
 
 export function buildStrategyGaFactory() {
-  return postJson(`${BASE}/build`, { focusSymbol: 'USDJPYc' });
+  return postCommandJson(`${BASE}/build`, { focusSymbol: 'USDJPYc' });
 }
 
 export function fetchStrategyFactoryIntentPlan(options = {}) {
@@ -16,19 +16,7 @@ export function fetchStrategyFactoryIntentPlan(options = {}) {
 
 export function buildStrategyFactoryIntentPlan({ prompt = '' } = {}) {
   const query = prompt ? `?prompt=${encodeURIComponent(prompt)}` : '';
-  return postJson(`${BASE}/intent-plan/build${query}`, { focusSymbol: 'USDJPYc', prompt });
-}
-
-export function fetchHyperliquidShadowLane(options = {}) {
-  return fetchJson(`${BASE}/hyperliquid-shadow`, null, options);
-}
-
-export function buildHyperliquidShadowLane({ targetAgentUrl = '', targetAgentProfileJson = '' } = {}) {
-  const params = new URLSearchParams();
-  if (targetAgentUrl) params.set('targetAgentUrl', targetAgentUrl);
-  if (targetAgentProfileJson) params.set('targetAgentProfileJson', targetAgentProfileJson);
-  const query = params.toString() ? `?${params.toString()}` : '';
-  return postJson(`${BASE}/hyperliquid-shadow/build${query}`, { targetAgentUrl, targetAgentProfileJson });
+  return postCommandJson(`${BASE}/intent-plan/build${query}`, { focusSymbol: 'USDJPYc', prompt });
 }
 
 export function fetchStrategyGaFactoryTelegramText({ refresh = false } = {}) {

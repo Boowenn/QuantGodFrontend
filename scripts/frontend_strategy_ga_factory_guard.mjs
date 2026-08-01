@@ -10,7 +10,7 @@ const files = [
   'package.json',
 ];
 const forbidden =
-  /\/QuantGod_.*\.(json|csv|jsonl)|runtime\/ga_factory|OrderSend|telegramCommandExecutionAllowed\s*[:=]\s*true|fetch\s*\(/i;
+  /\/QuantGod_.*\.(json|csv|jsonl)|runtime\/ga_factory|OrderSend|telegramCommandExecutionAllowed\s*[:=]\s*true|fetch\s*\(|hyperliquid|moss|\bcrypto\b|\bbtc\b/i;
 
 function read(rel) {
   const full = path.join(repoRoot, rel);
@@ -32,17 +32,14 @@ for (const marker of [
   '/status',
   '/build',
   '/intent-plan',
-  '/hyperliquid-shadow',
   '/telegram-text',
   'fetchStrategyGaFactoryStatus',
   'buildStrategyGaFactory',
   'fetchStrategyFactoryIntentPlan',
   'buildStrategyFactoryIntentPlan',
-  'fetchHyperliquidShadowLane',
-  'buildHyperliquidShadowLane',
   'fetchStrategyGaFactoryTelegramText',
   'fetchJson',
-  'postJson',
+  'postCommandJson',
 ]) {
   if (!service.includes(marker)) errors.push(`strategy GA factory service missing ${marker}`);
 }
@@ -60,11 +57,9 @@ for (const marker of [
   '性格锁',
   'PERSONALITY_LOCKED',
   'Strategy Factory intent',
-  'Moss / Hyperliquid shadow',
-  '不授权钱包',
   'SHADOW / FAST_SHADOW / TESTER_ONLY / PAPER_LIVE_SIM',
-  '不下单',
-  '不改 live preset',
+  '不会写入 MT5',
+  '不会修改 live preset',
 ]) {
   if (!component.includes(marker)) errors.push(`GA factory panel missing marker: ${marker}`);
 }
@@ -77,17 +72,12 @@ for (const marker of [
   'buildStrategyGaFactory',
   'fetchStrategyFactoryIntentPlan',
   'buildStrategyFactoryIntentPlan',
-  'fetchHyperliquidShadowLane',
-  'buildHyperliquidShadowLane',
   'runStrategyFactoryIntentPlan',
-  'runHyperliquidShadowLane',
   'runGAFactoryBuild',
   'gaFactorySummary',
   'strategyFactoryIntentSummary',
-  'hyperliquidShadowSummary',
   '生成 GA 工厂',
   '生成大白话策略',
-  '建立 Hyperliquid 影子',
 ]) {
   if (!panel.includes(marker)) errors.push(`Evolution panel missing marker: ${marker}`);
 }

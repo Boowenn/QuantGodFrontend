@@ -1,4 +1,4 @@
-import { fetchJson, postJson } from './apiClient.js';
+import { fetchJson, postCommandJson } from './apiClient.js';
 
 const BASE = '/api/case-memory';
 
@@ -7,7 +7,7 @@ export function fetchCaseMemoryStatus(options = {}) {
 }
 
 export function buildCaseMemoryCandidates() {
-  return postJson(`${BASE}/build`, { focusSymbol: 'USDJPYc' });
+  return postCommandJson(`${BASE}/build`, { focusSymbol: 'USDJPYc' });
 }
 
 export function fetchCaseMemoryTelegramText({ refresh = false } = {}) {

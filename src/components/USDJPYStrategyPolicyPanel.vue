@@ -3,7 +3,7 @@
     <header class="qg-usdjpy-panel__header">
       <div>
         <p class="qg-usdjpy-panel__eyebrow">USDJPY 单品种策略实验室</p>
-        <h2>只研究 USDJPYc，多策略评分与 EA 干跑</h2>
+        <h2>只研究 USDJPYc，多策略评分与 Shadow advisory</h2>
         <p class="qg-usdjpy-panel__subtitle">
           其他品种数据会被忽略；这里只展示策略是否标准入场、机会入场或阻断，以及缺失证据。
         </p>
@@ -11,7 +11,7 @@
       <div class="qg-usdjpy-panel__actions">
         <button type="button" :disabled="loading" @click="load">Agent 刷新证据</button>
         <button type="button" :disabled="loading" @click="runChain">Agent 生成政策证据</button>
-        <button type="button" :disabled="loading" @click="runLiveLoop">Agent 刷新实盘闭环</button>
+        <button type="button" :disabled="loading" @click="runLiveLoop">Agent 刷新影子建议</button>
         <button type="button" :disabled="loading" @click="runSignals">Agent 刷新信号证据</button>
       </div>
     </header>
@@ -33,17 +33,17 @@
           <strong>{{ status?.blockedCount ?? 0 }}</strong>
         </article>
         <article>
-          <span>最高允许仓位</span>
-          <strong>{{ formatLot(status?.maxLot ?? 2) }}</strong>
+          <span>最高研究仓位</span>
+          <strong>{{ formatLot(status?.maxLot) }}</strong>
         </article>
       </div>
 
       <article class="qg-usdjpy-panel__card qg-usdjpy-panel__live">
         <div>
-          <p class="qg-usdjpy-panel__eyebrow">实盘 EA 恢复状态</p>
-          <h3>{{ liveLoop?.stateZh || '等待 USDJPY 实盘闭环证据' }}</h3>
+          <p class="qg-usdjpy-panel__eyebrow">Shadow advisory 状态</p>
+          <h3>{{ advisoryStateLabel(liveLoop) }}</h3>
           <p>
-            {{ liveLoop?.liveRouteZh || '只允许 RSI_Reversal 买入路线由现有 EA 评估；其他路线保持模拟。' }}
+            {{ advisoryRouteLabel(liveLoop) }}
           </p>
         </div>
         <div class="qg-usdjpy-panel__live-grid">
@@ -51,12 +51,12 @@
             >运行快照 {{ boolLabel(liveLoop?.runtimeReady) }}</span
           >
           <span :class="evidenceClass(liveLoop?.presetReady)"
-            >实盘配置 {{ boolLabel(liveLoop?.presetReady) }}</span
+            >Shadow preset {{ boolLabel(liveLoop?.presetReady) }}</span
           >
           <span :class="evidenceClass(liveLoop?.policyReady)"
             >政策就绪 {{ boolLabel(liveLoop?.policyReady) }}</span
           >
-          <span>自动仓位上限 {{ liveLoop?.maxEaPositions ?? 2 }}，人工仓位不计入</span>
+          <span>研究容量上限 {{ formatCount(liveLoop?.maxEaPositions) }}，只用于影子建议</span>
         </div>
         <ul v-if="liveWhyNoEntry.length">
           <li v-for="reason in liveWhyNoEntry" :key="reason">{{ reason }}</li>
@@ -209,7 +209,9 @@
         <article class="qg-usdjpy-panel__table-card">
           <div class="qg-usdjpy-panel__section-title">
             <h3>风险检查</h3>
-            <span :class="evidenceClass(riskOk)">{{ riskOk ? '通过' : '等待证据' }}</span>
+            <span data-testid="risk-decision" :class="evidenceClass(riskOk)">
+              {{ riskOk ? 'PASS' : 'BLOCKED' }}
+            </span>
           </div>
           <ul class="qg-usdjpy-panel__evidence">
             <li :class="evidenceClass(riskCheck?.runtimeOk)">
@@ -310,8 +312,8 @@ const importedBacktests = computed(() => {
 });
 const riskOk = computed(() => {
   if (!riskCheck.value) return false;
-  if (riskCheck.value.ok === false || riskCheck.value.riskOk === false) return false;
-  return ['runtimeOk', 'fastlaneOk', 'newsOk', 'shadowOnly'].every((key) => riskCheck.value?.[key] !== false);
+  if (riskCheck.value.ok !== true || riskCheck.value.riskOk !== true) return false;
+  return ['runtimeOk', 'fastlaneOk', 'newsOk', 'shadowOnly'].every((key) => riskCheck.value?.[key] === true);
 });
 const liveWhyNoEntry = computed(() =>
   Array.isArray(liveLoop.value?.whyNoEntry) ? liveLoop.value.whyNoEntry.slice(0, 5) : [],
@@ -345,16 +347,40 @@ function pillClass(mode) {
 }
 
 function evidenceClass(ok) {
-  return ok ? 'qg-usdjpy-ok' : 'qg-usdjpy-bad';
+  if (ok === true) return 'qg-usdjpy-ok';
+  if (ok === false) return 'qg-usdjpy-bad';
+  return 'qg-usdjpy-unknown';
 }
 
 function boolLabel(ok) {
-  return ok ? '通过' : '缺失或未通过';
+  if (ok === true) return 'PASS';
+  if (ok === false) return 'BLOCKED';
+  return 'UNKNOWN';
+}
+
+function advisoryStateLabel(payload) {
+  const state = String(payload?.state || '').toUpperCase();
+  if (state === 'SHADOW_ADVISORY_READY') return '影子建议已就绪';
+  if (state === 'READY_FOR_EXISTING_EA') return '影子建议已就绪（旧契约）';
+  return payload?.stateZh || '等待 USDJPY Shadow advisory 证据';
+}
+
+function advisoryRouteLabel(payload) {
+  if (payload?.advisoryRouteZh) return payload.advisoryRouteZh;
+  if (payload?.liveRouteZh) return '旧 live 路线字段已降级为 Shadow 观察；不会触发交易。';
+  return '影子建议证据不可用；保持 fail-closed 并等待后端明确返回。';
 }
 
 function formatLot(value) {
-  const number = Number(value || 0);
-  return number.toFixed(2);
+  if (value == null || value === '') return '不可用';
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : '不可用';
+}
+
+function formatCount(value) {
+  if (value == null || value === '') return '不可用';
+  const number = Number(value);
+  return Number.isFinite(number) ? String(number) : '不可用';
 }
 
 function formatScore(value) {
@@ -376,7 +402,7 @@ function strategySummary(item) {
 function safetySummary(item) {
   const flags = item?.safety || item?.constraints || {};
   if (item?.shadowTradingOnly || item?.dryRunOnly || flags.shadowTradingOnly || flags.dryRunOnly) {
-    return '只做模拟采样，不进入实盘下单';
+    return '只做模拟采样；系统没有 broker 执行通道';
   }
   return '等待安全边界确认';
 }
@@ -394,14 +420,14 @@ function backtestSummary(item) {
     item.description ||
     item.acceptance ||
     item.reason ||
-    '用于 walk-forward、Strategy JSON、GA 和 Agent 治理门，不直接恢复实盘'
+    '用于 walk-forward、Strategy JSON、GA 和 Agent 治理门，只生成 Shadow 建议'
   );
 }
 
 function backtestImportStatus(item) {
   if (item.status === 'PROMOTABLE') return '统计达标，可进入 shadow 候选复核';
   if (item.status === 'NEEDS_RETEST') return '统计不足，需要重新回测';
-  return '继续观察，不恢复实盘';
+  return '继续 Shadow 观察，不触发交易';
 }
 
 function firstReason(item) {
@@ -480,7 +506,7 @@ async function runLiveLoop() {
   try {
     liveLoop.value = await runUSDJPYLiveLoop();
   } catch (err) {
-    error.value = err?.message || 'USDJPY 实盘闭环刷新失败';
+    error.value = err?.message || 'USDJPY Shadow advisory 刷新失败';
   } finally {
     loading.value = false;
   }
@@ -708,6 +734,10 @@ onMounted(load);
 
 .qg-usdjpy-bad {
   color: #fecaca;
+}
+
+.qg-usdjpy-unknown {
+  color: #fde68a;
 }
 
 .qg-usdjpy-panel__factory {

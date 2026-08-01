@@ -1,6 +1,11 @@
 <template>
   <div class="qg-metric-grid">
-    <article v-for="item in normalizedItems" :key="item.label" class="qg-metric-card">
+    <article
+      v-for="item in normalizedItems"
+      :key="item.label"
+      class="qg-metric-card"
+      :data-status="item.status || 'neutral'"
+    >
       <span class="qg-metric-card__label">{{ item.label }}</span>
       <strong>{{ formatDisplayValue(item.value) }}</strong>
       <small v-if="item.hint">{{ formatDisplayValue(item.hint) }}</small>

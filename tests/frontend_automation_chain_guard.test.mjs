@@ -10,29 +10,34 @@ test('automation chain frontend uses api facade and Chinese UX', () => {
   const panel = readFileSync(join(root, 'src/components/AutomationChainPanel.vue'), 'utf8');
   assert.match(service, /\/api\/automation-chain/);
   assert.match(service, /fetchJson/);
-  assert.match(service, /postJson/);
+  assert.match(service, /postCommandJson/);
   assert.match(service, /symbols=USDJPYc/);
   assert.doesNotMatch(service + panel, /USDJPYc,EURUSDc,XAUUSDc/);
   assert.doesNotMatch(service, /apiGet|apiPost/);
-  assert.match(panel, /USDJPY 实盘 EA 恢复状态/);
+  assert.match(panel, /USDJPY Shadow \/ ReadOnly/);
   assert.match(panel, /主状态来源/);
-  assert.match(panel, /实盘候选/);
-  assert.match(panel, /USDJPY Live Loop/);
+  assert.match(panel, /Shadow 候选/);
+  assert.match(panel, /Shadow Advisory（兼容 Live Loop）/);
+  assert.match(panel, /topAdvisoryPolicy/);
+  assert.match(panel, /SHADOW_ADVISORY_READY/);
+  assert.match(panel, /READY_FOR_EXISTING_EA/);
   assert.match(panel, /技术链路详情/);
-  assert.match(panel, /入场延迟时间线/);
-  assert.match(panel, /入场慢点/);
-  assert.match(panel, /复核就绪/);
+  assert.match(panel, /信号评估时间线/);
+  assert.match(panel, /信号延迟/);
+  assert.match(panel, /证据完整度/);
   assert.match(panel, /首个缺口/);
   assert.match(panel, /GA 精英/);
   assert.match(panel, /安全迭代计划/);
   assert.match(panel, /就绪缺口/);
   assert.match(panel, /缺失证据/);
   assert.match(panel, /阻断原因/);
-  assert.match(panel, /机会入场/);
+  assert.match(panel, /机会信号（只读）/);
 });
 
 test('automation chain frontend avoids direct runtime files and execution controls', () => {
-  const combined = readFileSync(join(root, 'src/services/automationChainApi.js'), 'utf8') + readFileSync(join(root, 'src/components/AutomationChainPanel.vue'), 'utf8');
+  const combined =
+    readFileSync(join(root, 'src/services/automationChainApi.js'), 'utf8') +
+    readFileSync(join(root, 'src/components/AutomationChainPanel.vue'), 'utf8');
   assert.doesNotMatch(combined, /QuantGod_.*\.(json|csv)/i);
   assert.doesNotMatch(combined, /OrderSend|quick-trade|privateKey|password|apiKey/i);
 });

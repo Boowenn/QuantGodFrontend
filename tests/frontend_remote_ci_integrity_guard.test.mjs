@@ -54,7 +54,6 @@ function writeBaseline(root) {
     'frontend_governance_workspace_guard.mjs': multilineScript(),
     'frontend_paramlab_workspace_guard.mjs': multilineScript(),
     'frontend_research_workspace_guard.mjs': multilineScript(),
-    'frontend_hfm_crypto_workspace_guard.mjs': multilineScript(),
     'frontend_legacy_deprecation_guard.mjs': multilineScript(),
     'frontend_lf_integrity_guard.mjs': multilineScript(),
     'frontend_legacy_slim_guard.mjs': multilineScript(),
@@ -86,7 +85,6 @@ function writeBaseline(root) {
           'governance-workspace': 'node scripts/frontend_governance_workspace_guard.mjs',
           'paramlab-workspace': 'node scripts/frontend_paramlab_workspace_guard.mjs',
           'research-workspace': 'node scripts/frontend_research_workspace_guard.mjs',
-          'hfm-crypto-workspace': 'node scripts/frontend_hfm_crypto_workspace_guard.mjs',
           'legacy-deprecation': 'node scripts/frontend_legacy_deprecation_guard.mjs',
           'lf-integrity': 'node scripts/frontend_lf_integrity_guard.mjs',
           'legacy-slim': 'node scripts/frontend_legacy_slim_guard.mjs',
@@ -161,8 +159,6 @@ function writeBaseline(root) {
       '        run: npm run paramlab-workspace',
       '      - name: Research workspace guard',
       '        run: npm run research-workspace',
-      '      - name: HFM Crypto workspace guard',
-      '        run: npm run hfm-crypto-workspace',
       '      - name: Legacy deprecation guard',
       '        run: npm run legacy-deprecation',
       '      - name: Legacy slim guard',
@@ -186,7 +182,7 @@ function writeBaseline(root) {
     'frontend_governance_workspace_guard.test.mjs',
     'frontend_paramlab_workspace_guard.test.mjs',
     'frontend_research_workspace_guard.test.mjs',
-    'frontend_hfm_crypto_workspace_guard.test.mjs',
+    'frontend_code_splitting_guard.test.mjs',
   ];
   for (const name of testNames) {
     writeFileSync(

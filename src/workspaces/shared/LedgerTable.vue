@@ -9,7 +9,7 @@
       <table>
         <thead>
           <tr>
-            <th v-for="column in columns" :key="column">{{ humanizeLabel(column) }}</th>
+            <th v-for="column in columns" :key="column" scope="col">{{ humanizeLabel(column) }}</th>
           </tr>
         </thead>
         <tbody>

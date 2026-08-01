@@ -342,7 +342,7 @@ export function buildSafetyEnvelope(state = {}) {
       boolFrom(merged.credentialStorageAllowed, false) ? 'error' : 'ok',
     ],
     [
-      '修改实盘配置',
+      '修改 MT5 preset',
       boolFrom(merged.livePresetMutationAllowed, false),
       boolFrom(merged.livePresetMutationAllowed, false) ? 'error' : 'ok',
     ],
@@ -362,7 +362,7 @@ export function buildSafetyEnvelope(state = {}) {
       boolFrom(merged.canPromoteOrDemoteRoute, false) ? 'error' : 'ok',
     ],
     [
-      '自动升实盘',
+      '创建执行通道',
       boolFrom(merged.autoPromotionAllowed, false),
       boolFrom(merged.autoPromotionAllowed, false) ? 'error' : 'ok',
     ],

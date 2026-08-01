@@ -1,4 +1,4 @@
-import { fetchJsonOrFallback, postJsonOrFallback } from './apiClient.js';
+import { fetchCommandJson, fetchJsonOrFallback, postCommandJson } from './apiClient.js';
 
 export const DEFAULT_BACKTEST_SYMBOLS = ['USDJPYc'];
 export const DEFAULT_BACKTEST_TIMEFRAMES = ['M15', 'H1', 'H4', 'D1'];
@@ -21,8 +21,8 @@ function fetchBacktestAiJson(path, fallback = null) {
   return fetchJsonOrFallback(path, fallback);
 }
 
-function postBacktestAiJson(path, payload = {}, fallback = null) {
-  return postJsonOrFallback(path, payload, fallback);
+function postBacktestAiJson(path, payload = {}) {
+  return postCommandJson(path, payload);
 }
 
 function toArray(value) {
@@ -260,7 +260,7 @@ export async function runBacktestAiCycle({
     days: String(Math.max(7, Math.min(365, Number(days) || 180))),
     maxTasks: String(Math.max(1, Math.min(50, Number(maxTasks) || 20))),
   });
-  const backtest = await fetchBacktestAiJson(`/api/mt5-backtest-loop/run?${params.toString()}`);
+  const backtest = await fetchCommandJson(`/api/mt5-backtest-loop/run?${params.toString()}`);
   const ai = await postBacktestAiJson('/api/ai-analysis/deepseek-telegram/run', {
     symbols: normalizedSymbols,
     timeframes,
@@ -278,7 +278,7 @@ export async function runBacktestAiCycle({
     });
   }
   return {
-    ok: backtest?.ok !== false && ai?.ok !== false && (!notify || notify?.ok !== false),
+    ok: true,
     generatedAt: new Date().toISOString(),
     symbols: normalizedSymbols,
     backtest,

@@ -4,7 +4,7 @@
       <div>
         <p class="eyebrow">P4-6 Production Evidence</p>
         <h3>生产证据验证</h3>
-        <p class="muted">验证历史数据、策略一致性、执行反馈和 GA 多代稳定性；只读，不触发交易。</p>
+        <p class="muted">验证历史数据、策略一致性、影子/历史反馈和 GA 多代稳定性；永久只读。</p>
       </div>
       <div class="production-evidence-card__actions">
         <button type="button" :disabled="loading" @click="load">刷新</button>
@@ -257,7 +257,7 @@ const cards = computed(() => {
     },
     {
       key: 'feedback',
-      label: '执行反馈',
+      label: '影子 / 历史反馈',
       status: r.liveExecutionFeedbackCoverage?.status || 'UNKNOWN',
       detail: `样本 ${r.liveExecutionFeedbackCoverage?.sampleCount || 0}，字段覆盖 ${(r.liveExecutionFeedbackCoverage?.fieldCoverage || 0) * 100}%`,
     },

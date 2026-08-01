@@ -89,24 +89,24 @@ test('fetchPhase2Json uses apiClient metadata and no-store options', async () =>
   assert.equal(calls[0].options.method, 'GET');
 });
 
-test('postPhase2Json uses local POST guard header and preserves fallback envelopes', async () => {
+test('postPhase2Json uses the local POST guard and rejects every non-ok command envelope', async () => {
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url: String(url), options });
     return jsonResponse({ error: 'notify_test_failed' }, 503);
   };
 
-  const payload = await postPhase2Json(
-    '/api/notify/test',
-    { message: 'dry-run', dryRun: true },
-    { ok: false, error: 'fallback' },
+  await assert.rejects(
+    postPhase2Json(
+      '/api/notify/test',
+      { message: 'dry-run', dryRun: true },
+      { ok: false, error: 'fallback' },
+    ),
+    /notify_test_failed/,
   );
-
-  assert.equal(payload.ok, false);
-  assert.equal(payload.error, 'notify_test_failed');
-  assert.equal(payload._api.endpoint, '/api/notify/test');
-  assert.equal(payload._api.method, 'POST');
-  assert.equal(payload._api.status, 503);
   assert.equal(calls[0].options.headers['X-QuantGod-Local'], '1');
   assert.deepEqual(JSON.parse(calls[0].options.body), { message: 'dry-run', dryRun: true });
+
+  globalThis.fetch = async () => jsonResponse({ sent: true });
+  await assert.rejects(postPhase2Json('/api/notify/test', { dryRun: true }), /did not confirm ok=true/);
 });

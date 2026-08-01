@@ -49,6 +49,7 @@ const workflow = read('.github/workflows/ci.yml');
 
 const requiredExports = [
   'assertApiPath',
+  'joinApiBaseUrl',
   'makeApiUrl',
   'queryString',
   'rowsFromPayload',
@@ -57,6 +58,8 @@ const requiredExports = [
   'postApiJson',
   'fetchJson',
   'postJson',
+  'fetchCommandJson',
+  'postCommandJson',
   'fetchRows',
   'apiFallback',
   'apiThrowMessage',
@@ -179,6 +182,12 @@ for (const token of ['fetchJsonOrFallback(', 'postJsonOrFallback(']) {
     fail(`src/services/backtestAiApi.js must call ${token} only inside its semantic wrapper`);
   }
 }
+if (!backtestAiSource.includes('postCommandJson(') || !backtestAiSource.includes('fetchCommandJson(')) {
+  fail('src/services/backtestAiApi.js commands must use strict command helpers');
+}
+if (backtestAiSource.includes('postJsonOrFallback(')) {
+  fail('src/services/backtestAiApi.js commands must not use postJsonOrFallback');
+}
 
 const phase1Source = serviceSources.get('src/services/phase1Api.js') || '';
 if (!phase1Source.includes('function fetchPhase1Json')) {
@@ -194,6 +203,9 @@ for (const token of ['fetchJsonOrFallback(', 'postJsonOrFallback(']) {
     fail(`src/services/phase1Api.js must call ${token} only inside its semantic wrapper`);
   }
 }
+if (!phase1Source.includes('postCommandJson(') || phase1Source.includes('postJsonOrFallback(')) {
+  fail('src/services/phase1Api.js commands must use postCommandJson exclusively');
+}
 for (const token of ['fetchJsonOrThrow', 'postJsonOrThrow']) {
   if (phase1Source.includes(token)) {
     fail(`src/services/phase1Api.js must not use throwing helper ${token}; return API envelopes`);
@@ -206,6 +218,16 @@ if (
   !legacyApiSource.includes('loadLegacyDashboardEntries')
 ) {
   fail('src/services/api.js loadDashboardState must use per-endpoint fallback loading');
+}
+for (const marker of [
+  '/api/dashboard/state',
+  '/api/mt5-readonly-secondary/snapshot',
+  'secondaryMt5Snapshot',
+  'secondarySnapshot: secondaryMt5Snapshot',
+]) {
+  if (!legacyApiSource.includes(marker)) {
+    fail(`src/services/api.js legacy dashboard loader must keep whole-frontend freshness marker: ${marker}`);
+  }
 }
 if (
   /const\s*\[[\s\S]*?\]\s*=\s*await\s*Promise\.all\s*\(\s*\[/.test(legacyApiSource) ||
@@ -228,6 +250,9 @@ for (const token of ['fetchJsonOrFallback(', 'postJsonOrFallback(']) {
     fail(`src/services/phase2Api.js must call ${token} only inside its semantic wrapper`);
   }
 }
+if (!phase2Source.includes('postCommandJson(') || phase2Source.includes('postJsonOrFallback(')) {
+  fail('src/services/phase2Api.js commands must use postCommandJson exclusively');
+}
 
 const phase3Source = serviceSources.get('src/services/phase3Api.js') || '';
 if (!phase3Source.includes('function fetchPhase3Json')) {
@@ -242,6 +267,9 @@ for (const token of ['fetchJsonOrFallback(', 'postJsonOrFallback(']) {
   if (secondIndex >= 0) {
     fail(`src/services/phase3Api.js must call ${token} only inside its semantic wrapper`);
   }
+}
+if (!phase3Source.includes('postCommandJson(') || phase3Source.includes('postJsonOrFallback(')) {
+  fail('src/services/phase3Api.js commands must use postCommandJson exclusively');
 }
 if (/\bfunction\s+getJson\b/.test(phase3Source)) {
   fail('src/services/phase3Api.js must not use generic getJson wrapper; use fetchPhase3Json');
@@ -263,6 +291,12 @@ for (const token of ['fetchJson(', 'postJson(']) {
 }
 if (/\bfunction\s+getJson\b/.test(usdJpyLabSource)) {
   fail('src/services/usdjpyStrategyLabApi.js must not use generic getJson wrapper; use fetchUSDJPYLabJson');
+}
+
+if (legacyApiSource.includes('/api/paramlab/auto-tester/')) {
+  if (!legacyApiSource.includes('postCommandJson(') || legacyApiSource.includes('postJson(')) {
+    fail('src/services/api.js ParamLab commands must use postCommandJson exclusively');
+  }
 }
 
 if (!domainApi.includes('queryString as params')) {

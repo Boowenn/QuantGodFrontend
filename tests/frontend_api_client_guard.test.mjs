@@ -37,6 +37,7 @@ function writeFixture(root, overrides = {}) {
     overrides.apiClient ??
       `
 export function assertApiPath(path) { return String(path).startsWith('/api/') ? path : (() => { throw new Error('bad'); })(); }
+export function joinApiBaseUrl(base, path) { return base + assertApiPath(path); }
 export function makeApiUrl(path) { return assertApiPath(path); }
 export function queryString() { return ''; }
 export function rowsFromPayload() { return []; }
@@ -45,6 +46,8 @@ export async function fetchApiJson() { return { ok: true, fetchedAt: '', duratio
 export async function postApiJson() { return { ok: true, fetchedAt: '', durationMs: 0 }; }
 export async function fetchJson() { return null; }
 export async function postJson() { return null; }
+export async function fetchCommandJson() { return { ok: true }; }
+export async function postCommandJson() { return { ok: true }; }
 export async function fetchRows() { return []; }
 export function apiFallback() { return {}; }
 export function apiThrowMessage() { return 'error'; }
@@ -68,38 +71,45 @@ export { fetchJson, fetchRows, postJson, rowsFromPayload };
   for (const servicePath of fixtureServicePaths) {
     const target = path.join(root, servicePath);
     if (fs.existsSync(target)) continue;
+    if (servicePath === 'src/services/api.js') {
+      fs.writeFileSync(
+        target,
+        "import { fetchJson } from './apiClient.js';\nasync function loadLegacyDashboardEntries(entries) { const results = {}; for (const [key, loadEntry] of entries) { results[key] = await loadEntry(); } return results; }\nexport async function loadDashboardState() { const { latest, state, mt5Snapshot, secondaryMt5Snapshot } = await loadLegacyDashboardEntries([['latest', () => fetchJson('/api/latest')], ['state', () => fetchJson('/api/dashboard/state')], ['mt5Snapshot', () => fetchJson('/api/mt5-readonly/snapshot')], ['secondaryMt5Snapshot', () => fetchJson('/api/mt5-readonly-secondary/snapshot')]]); return { mt5: { latest, state, snapshot: mt5Snapshot, secondarySnapshot: secondaryMt5Snapshot } }; }\n",
+      );
+      continue;
+    }
     if (servicePath === 'src/services/backtestAiApi.js') {
       fs.writeFileSync(
         target,
-        "import { fetchJsonOrFallback, postJsonOrFallback } from './apiClient.js';\nfunction fetchBacktestAiJson(path, fallback = null) { return fetchJsonOrFallback(path, fallback); }\nfunction postBacktestAiJson(path, payload = {}, fallback = null) { return postJsonOrFallback(path, payload, fallback); }\nexport async function loadBacktestAiState() { return fetchBacktestAiJson('/api/latest'); }\n",
+        "import { fetchCommandJson, fetchJsonOrFallback, postCommandJson } from './apiClient.js';\nfunction fetchBacktestAiJson(path, fallback = null) { return fetchJsonOrFallback(path, fallback); }\nfunction postBacktestAiJson(path, payload = {}) { return postCommandJson(path, payload); }\nexport async function loadBacktestAiState() { return fetchBacktestAiJson('/api/latest'); }\nexport async function runBacktestAiState() { await fetchCommandJson('/api/run'); return postBacktestAiJson('/api/run'); }\n",
       );
       continue;
     }
     if (servicePath === 'src/services/phase1Api.js') {
       fs.writeFileSync(
         target,
-        "import { fetchJsonOrFallback, postJsonOrFallback } from './apiClient.js';\nfunction fetchPhase1Json(path, fallback = null) { return fetchJsonOrFallback(path, fallback); }\nfunction postPhase1Json(path, payload = {}, fallback = null) { return postJsonOrFallback(path, payload, fallback); }\nexport async function load() { return fetchPhase1Json('/api/latest'); }\nexport async function run() { return postPhase1Json('/api/latest'); }\n",
+        "import { fetchJsonOrFallback, postCommandJson } from './apiClient.js';\nfunction fetchPhase1Json(path, fallback = null) { return fetchJsonOrFallback(path, fallback); }\nfunction postPhase1Json(path, payload = {}) { return postCommandJson(path, payload); }\nexport async function load() { return fetchPhase1Json('/api/latest'); }\nexport async function run() { return postPhase1Json('/api/latest'); }\n",
       );
       continue;
     }
     if (servicePath === 'src/services/phase2Api.js') {
       fs.writeFileSync(
         target,
-        "import { fetchJsonOrFallback, postJsonOrFallback } from './apiClient.js';\nfunction fetchPhase2Json(path, fallback = null) { return fetchJsonOrFallback(path, fallback); }\nfunction postPhase2Json(path, payload = {}, fallback = null) { return postJsonOrFallback(path, payload, fallback); }\nexport async function load() { return fetchPhase2Json('/api/latest'); }\nexport async function run() { return postPhase2Json('/api/latest'); }\n",
+        "import { fetchJsonOrFallback, postCommandJson } from './apiClient.js';\nfunction fetchPhase2Json(path, fallback = null) { return fetchJsonOrFallback(path, fallback); }\nfunction postPhase2Json(path, payload = {}) { return postCommandJson(path, payload); }\nexport async function load() { return fetchPhase2Json('/api/latest'); }\nexport async function run() { return postPhase2Json('/api/latest'); }\n",
       );
       continue;
     }
     if (servicePath === 'src/services/phase3Api.js') {
       fs.writeFileSync(
         target,
-        "import { fetchJsonOrFallback, postJsonOrFallback } from './apiClient.js';\nfunction fetchPhase3Json(path, fallback = null) { return fetchJsonOrFallback(path, fallback); }\nfunction postPhase3Json(path, payload = {}, fallback = null) { return postJsonOrFallback(path, payload, fallback); }\nexport const phase3Api = { latest: () => fetchPhase3Json('/api/latest'), run: () => postPhase3Json('/api/latest') };\n",
+        "import { fetchJsonOrFallback, postCommandJson } from './apiClient.js';\nfunction fetchPhase3Json(path, fallback = null) { return fetchJsonOrFallback(path, fallback); }\nfunction postPhase3Json(path, payload = {}) { return postCommandJson(path, payload); }\nexport const phase3Api = { latest: () => fetchPhase3Json('/api/latest'), run: () => postPhase3Json('/api/latest') };\n",
       );
       continue;
     }
     if (servicePath === 'src/services/usdjpyStrategyLabApi.js') {
       fs.writeFileSync(
         target,
-        "import { fetchJson, postJson } from './apiClient.js';\nfunction fetchUSDJPYLabJson(path, options = {}) { return fetchJson(path, null, options); }\nfunction postUSDJPYLabJson(path, payload = {}, options = {}) { return postJson(path, payload, null, options); }\nexport async function load() { return fetchUSDJPYLabJson('/api/usdjpy-strategy-lab/status'); }\nexport async function run() { return postUSDJPYLabJson('/api/usdjpy-strategy-lab/run', { focusSymbol: 'USDJPYc' }); }\n",
+        "import { fetchJson, postCommandJson } from './apiClient.js';\nfunction fetchUSDJPYLabJson(path, options = {}) { return fetchJson(path, null, options); }\nfunction postUSDJPYLabJson(path, payload = {}, options = {}) { return postCommandJson(path, payload, options); }\nexport async function load() { return fetchUSDJPYLabJson('/api/usdjpy-strategy-lab/status'); }\nexport async function run() { return postUSDJPYLabJson('/api/usdjpy-strategy-lab/run', { focusSymbol: 'USDJPYc' }); }\n",
       );
       continue;
     }

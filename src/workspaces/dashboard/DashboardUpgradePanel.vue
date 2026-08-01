@@ -22,12 +22,6 @@
         :tone="kpis.mt5DailyPnlTone"
         :detail="mt5DailyPnlDetail"
       />
-      <KpiCard
-        title="HFM Crypto 证据"
-        :value="kpis.hfmCryptoEvidence"
-        :tone="kpis.hfmCryptoTone"
-        detail="来自 HFM crypto CFD symbol 扫描"
-      />
       <KpiCard :title="labels.kpiSignals" :value="kpis.signals24h" :detail="kpis.signalDetail" badge="AI" />
       <KpiCard
         :title="labels.kpiAlerts"
@@ -58,7 +52,7 @@
         <div class="qg-ux-widget__header">
           <div>
             <h3>{{ labels.alertTimeline }}</h3>
-            <p>把治理、MT5、HFM Crypto 和自动闭环异常合并成可扫描时间线。</p>
+            <p>把治理、USDJPY MT5 和自动闭环异常合并成可扫描时间线。</p>
           </div>
           <span class="qg-ux-pill">{{ alertRows.length }} 条</span>
         </div>
@@ -200,7 +194,7 @@ function formatSignedAmount(value, suffix = 'USD') {
 function friendlySource(value) {
   const raw = String(value || '');
   if (!raw || raw === 'unknown') return '本地运行证据';
-  if (raw.includes('hfm_ea')) return 'HFM EA 快照';
+  if (raw.includes('mt5_ea')) return 'MT5 EA 快照';
   if (raw.includes('dashboard')) return '本地看板快照';
   return raw;
 }
@@ -215,13 +209,8 @@ const kpis = computed(() => {
     'state.data.positions',
   ]);
   const signals =
-    countRows([
-      'dailyReview.signals',
-      'dailyReview.data.signals',
-      'hfmCrypto.localEvidence.findings',
-      'latest.signals',
-      'latest.signal_rows',
-    ]) || Number(first(['dailyReview.signals_24h', 'dailyReview.signal_count_24h'], 0));
+    countRows(['dailyReview.signals', 'dailyReview.data.signals', 'latest.signals', 'latest.signal_rows']) ||
+    Number(first(['dailyReview.signals_24h', 'dailyReview.signal_count_24h'], 0));
   const alerts = alertRows.value.length;
   const mt5Pnl = numberOrNull(
     first(
@@ -237,28 +226,19 @@ const kpis = computed(() => {
       null,
     ),
   );
-  const hfmCryptoEvidence = countRows([
-    'hfmCryptoRows',
-    'hfmCrypto.localEvidence.findings',
-    'hfmCrypto.brokerSymbolCandidates',
-    'hfmCrypto.detectedRows',
-  ]);
-  const hfmCryptoReady = String(first(['hfmCrypto.status'], '')).includes('READY');
   return {
     positions: realtimeSnapshotBlocked.value ? '不可确认' : livePositions,
     dailyPnl: mt5Pnl ?? 0,
     mt5DailyPnlText: formatSignedAmount(mt5Pnl, 'USC'),
     mt5DailyPnlTone: realtimeSnapshotBlocked.value ? 'warning' : numberTone(mt5Pnl),
-    hfmCryptoEvidence,
-    hfmCryptoTone: hfmCryptoReady ? 'positive' : 'warning',
     signals24h: Number.isFinite(signals) ? signals : 0,
     alerts,
     positionDetail: realtimeSnapshotBlocked.value
       ? 'MT5 writer 停止；旧持仓不可当当前状态'
       : livePositions
-        ? '来自 HFM MT5 实盘快照'
+        ? '来自 MT5 外汇只读快照'
         : '当前无持仓',
-    signalDetail: 'AI 与 HFM Crypto 资料只做建议',
+    signalDetail: 'AI 与策略研究资料只做建议',
     alertDetail: realtimeSnapshotBlocked.value
       ? snapshotImpact.value.priorityLine
       : alerts
@@ -316,7 +296,7 @@ const alertRows = computed(() => {
     rows.push({ id: 'dry-run', label: '模拟保护关闭', status: '需要复核', toneClass: 'qg-text-warning' });
   }
   const rawAlerts = asArray(
-    first(['latest.alerts', 'state.alerts', 'dailyReview.alerts', 'dailyAutopilot.alerts'], []),
+    first(['latest.alerts', 'state.alerts', 'dailyReview.alerts', 'dailyAutopilotV2.alerts'], []),
   );
   rawAlerts.slice(0, 5).forEach((row, index) => {
     rows.push({

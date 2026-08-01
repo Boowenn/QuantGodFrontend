@@ -1,15 +1,15 @@
 <template>
   <WorkspaceFrame
     eyebrow="策略治理"
-    title="策略治理与升实盘闸门"
-    description="查看治理建议、版本门禁与优化计划；这里只展示证据，不执行升降级，也不改变实盘配置。"
+    title="策略治理与 Shadow 研究晋级"
+    description="查看治理建议、版本门禁与优化计划；这里只展示证据，不创建执行路线，也不改变 preset。"
     :loading="loading"
     :error="error"
     @refresh="load"
   >
     <div class="qg-safety-banner qg-safety-banner--locked">
       <strong>治理安全边界：</strong>
-      这里只给建议和只读证据。升实盘闸门必须人工授权，前端不能直接执行升降级、修改配置或任何交易动作。
+      这里只给建议和只读证据。研究晋级始终保持 Shadow / ReadOnly；人工授权也不能创建 execution lane。
     </div>
 
     <MetricGrid :items="view.metrics" />
@@ -36,7 +36,7 @@
             <p class="qg-panel__eyebrow">安全边界</p>
             <h3>只读治理边界</h3>
           </div>
-          <StatusPill status="locked" label="人工闸门" />
+          <StatusPill status="locked" label="只读边界" />
         </header>
         <KeyValueList :items="view.safety" />
       </section>

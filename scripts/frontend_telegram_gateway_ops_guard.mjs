@@ -36,7 +36,7 @@ for (const marker of [
   'collectTelegramGatewayOps',
   'fetchTelegramGatewayOpsTelegramText',
   'fetchJson',
-  'postJson',
+  'postCommandJson',
 ]) {
   if (!service.includes(marker)) errors.push(`Telegram Gateway Ops service missing ${marker}`);
 }
@@ -68,7 +68,9 @@ for (const marker of [
 }
 
 const packageJson = JSON.parse(read('package.json') || '{}');
-if (packageJson.scripts?.['telegram-gateway-ops'] !== 'node scripts/frontend_telegram_gateway_ops_guard.mjs') {
+if (
+  packageJson.scripts?.['telegram-gateway-ops'] !== 'node scripts/frontend_telegram_gateway_ops_guard.mjs'
+) {
   errors.push('package.json must define scripts.telegram-gateway-ops');
 }
 if (

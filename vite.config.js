@@ -17,8 +17,6 @@ export default defineConfig(({ mode }) => {
             if (id.includes('node_modules/monaco-editor')) return 'monaco-editor';
             if (id.includes('node_modules/klinecharts')) return 'klinecharts';
             if (id.includes('node_modules/ant-design-vue')) return 'ant-design-vue';
-            if (id.includes('src/workspaces/phase3/')) return 'workspace-phase3';
-            if (id.includes('src/workspaces/phase1/kline/')) return 'workspace-kline';
             return undefined;
           },
         },
@@ -29,7 +27,6 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         '/api': backendUrl,
-        '/QuantGod_': backendUrl,
       },
     },
   };

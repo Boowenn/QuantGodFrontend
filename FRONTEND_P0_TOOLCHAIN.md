@@ -27,7 +27,7 @@ npm run ux-foundation
 npm run p0-toolchain
 ```
 
-这些检查只约束前端源码，不允许新增 MT5、Backend tools、Cloudflare 或本地 runtime 数据读取。
+这些检查只约束前端源码，不允许新增 MT5、Backend tools 或本地 runtime 数据读取。
 
 ## 后续扩展
 
@@ -36,7 +36,6 @@ npm run p0-toolchain
 1. `src/workspaces/dashboard`
 2. `src/workspaces/mt5`
 3. `src/workspaces/paramlab`
-4. `src/workspaces/hfm-crypto`
-5. `src/workspaces/phase1` / `phase2` / `phase3`
+4. `src/workspaces/phase1` / `phase2` / `phase3`
 
 每次扩大范围时先修局部问题，再把对应目录加入 `package.json` 的脚本，避免一次性把历史债务全压进一个提交。

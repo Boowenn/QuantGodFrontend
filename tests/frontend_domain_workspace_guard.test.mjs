@@ -15,31 +15,38 @@ function makeFixture() {
   for (const [key, entry] of Object.entries(DOMAIN_WORKSPACES)) {
     write(path.join(root, 'src', 'workspaces', key, entry), '<template><div /></template>');
   }
-  write(path.join(root, 'src', 'app', 'workspaceRegistry.js'), `
+  write(
+    path.join(root, 'src', 'app', 'workspaceRegistry.js'),
+    `
 import DashboardWorkspace from '../workspaces/dashboard/DashboardWorkspace.vue';
 import Mt5Workspace from '../workspaces/mt5/Mt5Workspace.vue';
 import EvolutionWorkspace from '../workspaces/evolution/EvolutionWorkspace.vue';
 import GovernanceWorkspace from '../workspaces/governance/GovernanceWorkspace.vue';
 import ParamLabWorkspace from '../workspaces/paramlab/ParamLabWorkspace.vue';
 import ResearchWorkspace from '../workspaces/research/ResearchWorkspace.vue';
-import HfmCryptoWorkspace from '../workspaces/hfm-crypto/HfmCryptoWorkspace.vue';
-export const WORKSPACE_COMPONENTS = { dashboard: DashboardWorkspace, mt5: Mt5Workspace, evolution: EvolutionWorkspace, governance: GovernanceWorkspace, paramlab: ParamLabWorkspace, research: ResearchWorkspace, 'hfm-crypto': HfmCryptoWorkspace };
-`);
-write(path.join(root, 'src', 'app', 'navigation.js'), `
+export const WORKSPACE_COMPONENTS = { dashboard: DashboardWorkspace, mt5: Mt5Workspace, evolution: EvolutionWorkspace, governance: GovernanceWorkspace, paramlab: ParamLabWorkspace, research: ResearchWorkspace };
+`,
+  );
+  write(
+    path.join(root, 'src', 'app', 'navigation.js'),
+    `
 export const DEFAULT_WORKSPACE = 'dashboard';
 export const WORKSPACE_GROUPS = [{ items: [
-  { key: 'dashboard' }, { key: 'mt5' }, { key: 'evolution' }, { key: 'hfm-crypto' }
+  { key: 'dashboard' }, { key: 'mt5' }, { key: 'evolution' }
 ] }];
 export const HIDDEN_WORKSPACES = [{ key: 'governance' }, { key: 'paramlab' }, { key: 'research' }];
-`);
-  write(path.join(root, 'src', 'services', 'domainApi.js'), `
+`,
+  );
+  write(
+    path.join(root, 'src', 'services', 'domainApi.js'),
+    `
 export async function loadDashboardWorkspace() { return fetch('/api/latest'); }
 export async function loadMt5Workspace() { return fetch('/api/mt5-readonly/status'); }
 export async function loadGovernanceWorkspace() { return fetch('/api/governance/advisor'); }
 export async function loadParamLabWorkspace() { return fetch('/api/paramlab/status'); }
 export async function loadResearchWorkspace() { return fetch('/api/research/stats'); }
-export async function loadHfmCryptoWorkspace() { return fetch('/api/hfm-crypto/status?view=summary'); }
-`);
+`,
+  );
   return root;
 }
 
@@ -56,28 +63,32 @@ test('rejects missing domain workspace entry', () => {
 
 test('rejects direct QuantGod runtime file reads', () => {
   const root = makeFixture();
-  write(path.join(root, 'src', 'services', 'domainApi.js'), `
+  write(
+    path.join(root, 'src', 'services', 'domainApi.js'),
+    `
 export async function loadDashboardWorkspace() { return fetch('/QuantGod_Dashboard.json'); }
 export async function loadMt5Workspace() { return fetch('/api/mt5-readonly/status'); }
 export async function loadGovernanceWorkspace() { return fetch('/api/governance/advisor'); }
 export async function loadParamLabWorkspace() { return fetch('/api/paramlab/status'); }
 export async function loadResearchWorkspace() { return fetch('/api/research/stats'); }
-export async function loadHfmCryptoWorkspace() { return fetch('/api/hfm-crypto/status?view=summary'); }
-`);
+`,
+  );
   assert.match(checkProject(root).join('\n'), /QuantGod runtime file path|non-\/api fetch/);
 });
 
-test('rejects full HFM crypto status in dashboard first load', () => {
+test('rejects a retired non-Forex lane in the domain API', () => {
   const root = makeFixture();
-  write(path.join(root, 'src', 'services', 'domainApi.js'), `
-export async function loadDashboardWorkspace() { return fetch('/api/hfm-crypto/status'); }
+  write(
+    path.join(root, 'src', 'services', 'domainApi.js'),
+    `
+export async function loadDashboardWorkspace() { return fetch('/api/crypto/status'); }
 export async function loadMt5Workspace() { return fetch('/api/mt5-readonly/status'); }
 export async function loadGovernanceWorkspace() { return fetch('/api/governance/advisor'); }
 export async function loadParamLabWorkspace() { return fetch('/api/paramlab/status'); }
 export async function loadResearchWorkspace() { return fetch('/api/research/stats'); }
-export async function loadHfmCryptoWorkspace() { return fetch('/api/hfm-crypto/status?view=summary'); }
-`);
-  assert.match(checkProject(root).join('\n'), /dashboard HFM crypto load must use compact/);
+`,
+  );
+  assert.match(checkProject(root).join('\n'), /retired non-Forex lane/);
 });
 
 test('rejects domain directories under generic components', () => {
@@ -88,24 +99,30 @@ test('rejects domain directories under generic components', () => {
 
 test('rejects archived tool workspaces in primary navigation', () => {
   const root = makeFixture();
-  write(path.join(root, 'src', 'app', 'navigation.js'), `
+  write(
+    path.join(root, 'src', 'app', 'navigation.js'),
+    `
 export const DEFAULT_WORKSPACE = 'dashboard';
 export const WORKSPACE_GROUPS = [{ items: [
-  { key: 'dashboard' }, { key: 'mt5' }, { key: 'evolution' }, { key: 'hfm-crypto' }, { key: 'governance' }
+  { key: 'dashboard' }, { key: 'mt5' }, { key: 'evolution' }, { key: 'governance' }
 ] }];
 export const HIDDEN_WORKSPACES = [{ key: 'paramlab' }, { key: 'research' }];
-`);
+`,
+  );
   assert.match(checkProject(root).join('\n'), /governance must not be in primary navigation/);
 });
 
 test('rejects archived tool workspaces without hidden deep-link metadata', () => {
   const root = makeFixture();
-  write(path.join(root, 'src', 'app', 'navigation.js'), `
+  write(
+    path.join(root, 'src', 'app', 'navigation.js'),
+    `
 export const DEFAULT_WORKSPACE = 'dashboard';
 export const WORKSPACE_GROUPS = [{ items: [
-  { key: 'dashboard' }, { key: 'mt5' }, { key: 'evolution' }, { key: 'hfm-crypto' }
+  { key: 'dashboard' }, { key: 'mt5' }, { key: 'evolution' }
 ] }];
 export const HIDDEN_WORKSPACES = [{ key: 'governance' }, { key: 'research' }];
-`);
+`,
+  );
   assert.match(checkProject(root).join('\n'), /paramlab must remain available as a hidden deep-link/);
 });

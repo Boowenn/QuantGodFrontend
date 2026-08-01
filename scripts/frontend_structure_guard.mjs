@@ -16,7 +16,7 @@ const REQUIRED_FILES = [
   'src/stores/workspaceStore.js',
 ];
 
-const FORBIDDEN_ROOT_DIRS = ['Dashboard', 'MQL5', 'tools', 'cloudflare'];
+const FORBIDDEN_ROOT_DIRS = ['Dashboard', 'MQL5', 'tools'];
 
 function rel(root, target) {
   return path.relative(root, target).replaceAll(path.sep, '/') || '.';

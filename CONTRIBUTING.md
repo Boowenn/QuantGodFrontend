@@ -10,7 +10,7 @@ Keep changes inside the correct split repository:
 
 - Backend changes belong in `QuantGodBackend`.
 - Frontend UI and API client changes belong in `QuantGodFrontend`.
-- Workspace automation, deployment, Cloudflare, and sync helpers belong in `QuantGodInfra`.
+- Local workspace automation and launch orchestration belong in `QuantGodInfra`.
 - Architecture, API contracts, runbooks, phase docs, and maintenance docs belong in `QuantGodDocs`.
 
 ## Safety rules

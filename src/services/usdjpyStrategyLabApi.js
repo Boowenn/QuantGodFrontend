@@ -1,23 +1,21 @@
-import { fetchJson, postJson } from './apiClient.js';
+import { fetchJson, postCommandJson } from './apiClient.js';
 
 const BASE = '/api/usdjpy-strategy-lab';
-const HFM_CRYPTO_ACCOUNT_SCOPE = 'secondary';
 
 function fetchUSDJPYLabJson(path, options = {}) {
   return fetchJson(path, null, options);
 }
 
 function postUSDJPYLabJson(path, payload = {}, options = {}) {
-  return postJson(path, payload, null, options);
+  return postCommandJson(path, payload, options);
 }
 
-function hfmCryptoScopedQuery(query = {}) {
+function optionalQuery(query = {}) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined && value !== null && value !== false && value !== '')
       params.set(key, String(value));
   }
-  params.set('scope', query.scope || HFM_CRYPTO_ACCOUNT_SCOPE);
   const text = params.toString();
   return text ? `?${text}` : '';
 }
@@ -215,56 +213,52 @@ export function fetchUSDJPYMt5ShadowLane({ refresh = false } = {}, options = {})
   return fetchUSDJPYLabJson(`${BASE}/autonomous-agent/mt5-shadow${query}`, options);
 }
 
-export function fetchUSDJPYHfmCryptoShadowLane(_query = {}, options = {}) {
-  return fetchUSDJPYLabJson('/api/hfm-crypto/status?view=summary&scope=secondary', options);
-}
-
 export function fetchUSDJPYEaReproducibility({ refresh = false } = {}, options = {}) {
   const query = refresh ? '?refresh=1' : '';
   return fetchUSDJPYLabJson(`${BASE}/autonomous-agent/ea-repro${query}`, options);
 }
 
 export function fetchUSDJPYDailyAutopilotV2({ refresh = false } = {}, options = {}) {
-  const query = hfmCryptoScopedQuery({ refresh: refresh ? '1' : '' });
+  const query = optionalQuery({ refresh: refresh ? '1' : '' });
   return fetchUSDJPYLabJson(`${BASE}/autonomous-agent/daily-autopilot-v2${query}`, options);
 }
 
 export function runUSDJPYDailyAutopilotV2() {
-  return postUSDJPYLabJson(`${BASE}/autonomous-agent/daily-autopilot-v2/run${hfmCryptoScopedQuery()}`, {
+  return postUSDJPYLabJson(`${BASE}/autonomous-agent/daily-autopilot-v2/run`, {
     focusSymbol: 'USDJPYc',
   });
 }
 
 export function fetchUSDJPYDailyAutopilotV2TelegramText({ refresh = false } = {}) {
-  const query = hfmCryptoScopedQuery({ refresh: refresh ? '1' : '' });
+  const query = optionalQuery({ refresh: refresh ? '1' : '' });
   return fetchUSDJPYLabJson(`${BASE}/autonomous-agent/daily-autopilot-v2/telegram-text${query}`);
 }
 
 export function fetchUSDJPYAgentDailyTodo({ refresh = false } = {}, options = {}) {
-  const query = hfmCryptoScopedQuery({ refresh: refresh ? '1' : '' });
+  const query = optionalQuery({ refresh: refresh ? '1' : '' });
   return fetchUSDJPYLabJson(`${BASE}/daily-todo${query}`, options);
 }
 
 export function runUSDJPYAgentDailyTodo() {
-  return postUSDJPYLabJson(`${BASE}/daily-todo/run${hfmCryptoScopedQuery()}`, { focusSymbol: 'USDJPYc' });
+  return postUSDJPYLabJson(`${BASE}/daily-todo/run`, { focusSymbol: 'USDJPYc' });
 }
 
 export function fetchUSDJPYAgentDailyTodoTelegramText({ refresh = false } = {}) {
-  const query = hfmCryptoScopedQuery({ refresh: refresh ? '1' : '' });
+  const query = optionalQuery({ refresh: refresh ? '1' : '' });
   return fetchUSDJPYLabJson(`${BASE}/daily-todo/telegram-text${query}`);
 }
 
 export function fetchUSDJPYAgentDailyReview({ refresh = false } = {}, options = {}) {
-  const query = hfmCryptoScopedQuery({ refresh: refresh ? '1' : '' });
+  const query = optionalQuery({ refresh: refresh ? '1' : '' });
   return fetchUSDJPYLabJson(`${BASE}/daily-review${query}`, options);
 }
 
 export function runUSDJPYAgentDailyReview() {
-  return postUSDJPYLabJson(`${BASE}/daily-review/run${hfmCryptoScopedQuery()}`, { focusSymbol: 'USDJPYc' });
+  return postUSDJPYLabJson(`${BASE}/daily-review/run`, { focusSymbol: 'USDJPYc' });
 }
 
 export function fetchUSDJPYAgentDailyReviewTelegramText({ refresh = false } = {}) {
-  const query = hfmCryptoScopedQuery({ refresh: refresh ? '1' : '' });
+  const query = optionalQuery({ refresh: refresh ? '1' : '' });
   return fetchUSDJPYLabJson(`${BASE}/daily-review/telegram-text${query}`);
 }
 
@@ -394,6 +388,6 @@ export function dispatchUSDJPYTelegramGateway({ send = false, limit = 8 } = {}) 
 }
 
 export function fetchUSDJPYAgentOpsHealth({ refresh = false } = {}) {
-  const query = hfmCryptoScopedQuery({ refresh: refresh ? '1' : '' });
+  const query = optionalQuery({ refresh: refresh ? '1' : '' });
   return fetchUSDJPYLabJson(`${BASE}/agent-ops-health/status${query}`);
 }

@@ -16,7 +16,6 @@ export const WORKSPACE_COMPONENTS = {
   governance: lazyWorkspace(() => import('../workspaces/governance/GovernanceWorkspace.vue')),
   paramlab: lazyWorkspace(() => import('../workspaces/paramlab/ParamLabWorkspace.vue')),
   research: lazyWorkspace(() => import('../workspaces/research/ResearchWorkspace.vue')),
-  'hfm-crypto': lazyWorkspace(() => import('../workspaces/hfm-crypto/HfmCryptoWorkspace.vue')),
   'backtest-ai': lazyWorkspace(() => import('../workspaces/backtest-ai/BacktestAiWorkspace.vue')),
   phase1: lazyWorkspace(() => import('../workspaces/phase1/Phase1Workspace.vue')),
   phase2: lazyWorkspace(() => import('../workspaces/phase2/Phase2OperationsWorkspace.vue')),

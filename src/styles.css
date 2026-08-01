@@ -1719,8 +1719,7 @@ h2 {
 }
 
 .governance-lane-rich.compact,
-.compact-governance .governance-lane-rich.compact,
-.wallet-boundary-row {
+.compact-governance .governance-lane-rich.compact {
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
@@ -1761,8 +1760,7 @@ h2 {
   gap: 5px;
 }
 
-.governance-lane-rich.compact .lane-chipset,
-.wallet-boundary-row .lane-chipset {
+.governance-lane-rich.compact .lane-chipset {
   justify-content: flex-start;
 }
 
@@ -4590,7 +4588,7 @@ tbody tr:hover td {
 
 .qg-eyebrow {
   margin: 0;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #93c5fd;
@@ -4641,11 +4639,25 @@ tbody tr:hover td {
   padding: 14px;
 }
 
+.qg-metric-card[data-status='ok'] {
+  border-left: 3px solid rgb(51 217 154 / 70%);
+}
+
+.qg-metric-card[data-status='warn'],
+.qg-metric-card[data-status='unknown'] {
+  border-left: 3px solid rgb(251 191 36 / 70%);
+}
+
+.qg-metric-card[data-status='blocked'],
+.qg-metric-card[data-status='error'] {
+  border-left: 3px solid rgb(255 107 134 / 76%);
+}
+
 .qg-metric-card__label {
   display: block;
   margin-bottom: 8px;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
 }
 
@@ -4659,6 +4671,8 @@ tbody tr:hover td {
 
 .qg-metric-card small {
   color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .qg-section-note {
@@ -4687,7 +4701,7 @@ tbody tr:hover td {
 .qg-json-preview__source,
 .qg-ledger-table header span {
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .qg-json-preview pre {
@@ -4737,7 +4751,7 @@ tbody tr:hover td {
   padding: 8px 10px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
   text-align: left;
-  font-size: 12px;
+  font-size: 13px;
   vertical-align: top;
   white-space: normal;
   overflow-wrap: break-word;
@@ -4894,9 +4908,17 @@ tbody tr:hover td {
   background: linear-gradient(135deg, rgba(30, 64, 175, 0.24), rgba(15, 23, 42, 0.72));
 }
 
-.qg-domain-panel--details summary {
+.qg-domain-panel--details > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
   cursor: pointer;
   font-weight: 700;
+}
+
+.qg-domain-panel--details > summary:focus-visible {
+  outline: 3px solid rgb(56 189 248 / 72%);
+  outline-offset: 3px;
 }
 
 .qg-domain-panel__header {
@@ -5010,6 +5032,7 @@ tbody tr:hover td {
 
 .qg-endpoint-card {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
   align-items: center;
@@ -5017,6 +5040,12 @@ tbody tr:hover td {
   border-radius: 14px;
   padding: 12px;
   background: rgba(15, 23, 42, 0.42);
+}
+
+.qg-endpoint-card > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .qg-endpoint-card small {

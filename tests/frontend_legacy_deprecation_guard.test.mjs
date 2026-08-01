@@ -26,7 +26,6 @@ function makeRepo(overrides = {}) {
     'src/workspaces/governance/GovernanceWorkspace.vue',
     'src/workspaces/paramlab/ParamLabWorkspace.vue',
     'src/workspaces/research/ResearchWorkspace.vue',
-    'src/workspaces/hfm-crypto/HfmCryptoWorkspace.vue',
     'src/workspaces/phase1/Phase1Workspace.vue',
     'src/workspaces/phase2/Phase2OperationsWorkspace.vue',
     'src/workspaces/phase3/Phase3Workspace.vue',

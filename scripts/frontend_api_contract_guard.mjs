@@ -16,7 +16,7 @@ import process from 'node:process';
 const DEFAULT_SOURCE_DIR = 'src';
 const SCANNED_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.vue', '.jsx', '.tsx']);
 const IGNORED_DIRS = new Set(['node_modules', 'dist', 'coverage', '.git', '.github']);
-const SPLIT_FORBIDDEN_DIRS = ['Dashboard', 'MQL5', 'tools', 'cloudflare'];
+const SPLIT_FORBIDDEN_DIRS = ['Dashboard', 'MQL5', 'tools'];
 
 const DIRECT_RUNTIME_ARTIFACT_RE = /['"`]\/QuantGod_[A-Za-z0-9_.-]+\.(?:json|csv)['"`]/i;
 const DIRECT_RUNTIME_PATH_RE = /\/(?:QuantGod_[A-Za-z0-9_.-]+\.(?:json|csv))/i;

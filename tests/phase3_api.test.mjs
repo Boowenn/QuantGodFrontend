@@ -59,14 +59,13 @@ test('phase3Api POST calls use apiClient CSRF header and preserve metadata', asy
   });
 });
 
-test('phase3Api fallback keeps endpoint status when backend rejects a request', async () => {
+test('phase3Api commands throw when HTTP or domain success is not explicit', async () => {
   globalThis.fetch = async () => jsonResponse({ error: 'backend_busy' }, 503);
+  await assert.rejects(phase3Api.runAiV2({ symbol: 'USDJPYc' }), /backend_busy/);
 
-  const payload = await phase3Api.runAiV2({ symbol: 'USDJPYc' });
+  globalThis.fetch = async () => jsonResponse({ status: 'COMPLETED' });
+  await assert.rejects(phase3Api.runAiV2({ symbol: 'USDJPYc' }), /did not confirm ok=true/);
 
-  assert.equal(payload.ok, false);
-  assert.equal(payload.error, 'backend_busy');
-  assert.equal(payload._api.endpoint, '/api/ai-analysis-v2/run');
-  assert.equal(payload._api.method, 'POST');
-  assert.equal(payload._api.status, 503);
+  globalThis.fetch = async () => jsonResponse({ ok: false, status: 'BLOCKED' });
+  await assert.rejects(phase3Api.runAiV2({ symbol: 'USDJPYc' }), /BLOCKED|did not confirm ok=true/);
 });
