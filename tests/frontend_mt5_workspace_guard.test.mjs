@@ -47,7 +47,7 @@ const model = [
 ].join('\n');
 
 const workspace = [
-  '<template><EndpointHealthGrid /><KeyValueList :items="primaryAxisItems" /><MetricGrid :items="coreMetrics" /><details class="qg-mt5-progressive">账户登记与快照诊断</details><section>当前账号与凭据边界</section><LedgerTable title="第二账号信息" /><LedgerTable title="RSI 入场诊断" :limit="3" /><LedgerTable title="当前账号数据是否可信" :rows="snapshotRecoveryRows" /><StatusPill />模式与市场 全局快照恢复 {{ snapshotRootCause }} 执行反馈与下一代修复 Safety Envelope Raw MT5 evidence</template>',
+  '<template><EndpointHealthGrid /><KeyValueList :items="primaryAxisItems" /><MetricGrid :items="coreMetrics" /><details class="qg-mt5-progressive">账户登记与快照诊断</details><section>当前账号与凭据边界</section><LedgerTable title="第二账号信息" /><LedgerTable title="RSI 影子条件诊断" :limit="3" /><LedgerTable title="当前账号数据是否可信" :rows="snapshotRecoveryRows" /><StatusPill />模式与市场 全局快照恢复 {{ snapshotRootCause }} 影子结果反馈与下一代修复 Safety Envelope Raw MT5 evidence</template>',
   '<script setup>',
   "import { loadMt5Workspace, loadMt5WorkspaceCore } from '../../services/domainApi.js';",
   "import { normalizeMt5Snapshot } from './mt5Model.js';",
