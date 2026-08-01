@@ -1,14 +1,13 @@
-import { fetchJsonOrFallback, postJsonOrFallback } from './apiClient.js';
+import { fetchJsonOrFallback, postCommandJson } from './apiClient.js';
 
 const FETCH_FALLBACK = Object.freeze({ ok: false, error: 'phase3_fetch_failed' });
-const POST_FALLBACK = Object.freeze({ ok: false, error: 'phase3_post_failed' });
 
 function fetchPhase3Json(url, options = {}) {
   return fetchJsonOrFallback(url, FETCH_FALLBACK, { signal: options.signal });
 }
 
 function postPhase3Json(url, body = {}, options = {}) {
-  return postJsonOrFallback(url, body || {}, POST_FALLBACK, { signal: options.signal });
+  return postCommandJson(url, body || {}, { signal: options.signal });
 }
 
 export const phase3Api = {

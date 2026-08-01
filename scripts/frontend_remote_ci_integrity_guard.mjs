@@ -90,7 +90,6 @@ function checkPackageShape() {
     'governance-workspace',
     'paramlab-workspace',
     'research-workspace',
-    'hfm-crypto-workspace',
     'legacy-deprecation',
     'lf-integrity',
     'legacy-slim',

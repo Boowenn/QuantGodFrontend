@@ -24,7 +24,6 @@ npm run mt5-workspace
 npm run governance-workspace
 npm run paramlab-workspace
 npm run research-workspace
-npm run hfm-crypto-workspace
 npm run legacy-deprecation
 npm run legacy-slim
 npm test

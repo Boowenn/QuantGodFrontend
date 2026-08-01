@@ -11,7 +11,7 @@
 - 6 个业务域 workspace 第一层 parity。
 - 业务域 guard 矩阵。
 
-此前 `src/workspaces/legacy/LegacyWorkbench.vue` 和 `archive/legacy-workbench/LegacyWorkbenchFull.vue` 只用于迁移对照。HFM Crypto workspace 接入后，旧工作台已经不再作为运行时代码或 archive 源码保留。
+此前 `src/workspaces/legacy/LegacyWorkbench.vue` 和 `archive/legacy-workbench/LegacyWorkbenchFull.vue` 只用于迁移对照。独立外汇业务域完成接入后，旧工作台已经不再作为运行时代码或 archive 源码保留。
 
 ## 本轮新增
 
@@ -26,7 +26,7 @@
 - `archive/legacy-workbench/LegacyWorkbenchFull.vue` 不允许存在。
 - 任何 active source 不允许 import 或引用 LegacyWorkbench。
 - Legacy 不能成为默认 workspace。
-- 9 个业务域 workspace 必须存在，包含 HFM Crypto。
+- 当前外汇业务域 workspace 必须存在。
 - CI 必须运行 `npm run legacy-deprecation`。
 - 业务域 workspace 不能直接 `fetch()` 或读取 `/QuantGod_*.json/csv`。
 
@@ -42,7 +42,6 @@ npm run mt5-workspace
 npm run governance-workspace
 npm run paramlab-workspace
 npm run research-workspace
-npm run hfm-crypto-workspace
 npm run legacy-deprecation
 npm test
 npm run build

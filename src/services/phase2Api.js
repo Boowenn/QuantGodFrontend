@@ -1,4 +1,4 @@
-import { fetchJsonOrFallback, postJsonOrFallback } from './apiClient.js';
+import { fetchJsonOrFallback, postCommandJson } from './apiClient.js';
 import { formatDisplayValue, humanizeLabel } from '../utils/displayText.js';
 
 export const PHASE2_ENDPOINTS = Object.freeze({
@@ -45,8 +45,8 @@ export async function fetchPhase2Json(url, fallback = null, options = {}) {
   return fetchJsonOrFallback(url, fallback, options);
 }
 
-export async function postPhase2Json(url, payload = {}, fallback = null, options = {}) {
-  return postJsonOrFallback(url, payload, fallback, options);
+export async function postPhase2Json(url, payload = {}, _fallback = null, options = {}) {
+  return postCommandJson(url, payload, options);
 }
 
 export function extractRows(payload) {

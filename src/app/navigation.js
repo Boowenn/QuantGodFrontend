@@ -5,23 +5,18 @@ export const WORKSPACE_GROUPS = [
     items: [
       {
         key: 'dashboard',
-        label: 'Dashboard',
-        description: '三车道总览、自主日报、自动回滚和硬风控状态。',
+        label: '总览',
+        description: '外汇运行状态、关键阻断与下一步。',
       },
       {
         key: 'mt5',
         label: 'MT5',
-        description: 'USDJPY 实盘 EA、RSI 诊断、执行反馈和守门状态。',
+        description: '账户、行情、持仓与只读证据。',
       },
       {
         key: 'evolution',
-        label: 'Evolution',
-        description: '策略契约、回放、回测、遗传进化、经验记忆和自主代理证据。',
-      },
-      {
-        key: 'hfm-crypto',
-        label: 'HFM Crypto',
-        description: 'HFM crypto CFD symbol 扫描、Moss 回测导入和 shadow-only 跟单研究。',
+        label: '策略进化',
+        description: '回测、参数进化与策略证据。',
       },
     ],
   },

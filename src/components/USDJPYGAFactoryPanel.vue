@@ -49,11 +49,6 @@
         <strong>{{ intentStatusText }}</strong>
         <p>有效 seed {{ intentValidSeedCount }}；{{ intentReasonText }}</p>
       </article>
-      <article>
-        <span>Hyperliquid 影子</span>
-        <strong>{{ hyperliquidStatusText }}</strong>
-        <p>{{ hyperliquidReasonText }} {{ hyperliquidMetricsText }}</p>
-      </article>
     </div>
 
     <div class="qg-usdjpy-evolution__scenario-grid">
@@ -62,18 +57,6 @@
         <textarea v-model="intentPrompt" :disabled="loading" rows="3" />
         <button type="button" :disabled="loading" @click="$emit('build-intent', intentPrompt)">
           生成 intent plan
-        </button>
-      </article>
-      <article>
-        <span>Moss / Hyperliquid shadow</span>
-        <input v-model="targetAgentUrl" :disabled="loading" type="url" />
-        <input v-model="targetAgentProfileJson" :disabled="loading" type="text" />
-        <button
-          type="button"
-          :disabled="loading"
-          @click="$emit('build-hyperliquid', { targetAgentUrl, targetAgentProfileJson })"
-        >
-          建立 shadow lane
         </button>
       </article>
     </div>
@@ -110,8 +93,8 @@
     </div>
 
     <p class="qg-usdjpy-evolution__note">
-      安全边界：GA Factory 只允许 SHADOW / FAST_SHADOW / TESTER_ONLY / PAPER_LIVE_SIM；
-      Hyperliquid 只读影子车道不授权钱包、不下单、不平仓、不撤单、不写 MT5 OrderRequest、不改 live preset、不接 Telegram 交易命令。
+      安全边界：GA Factory 只允许 SHADOW / FAST_SHADOW / TESTER_ONLY / PAPER_LIVE_SIM；不会写入 MT5
+      OrderRequest、不会修改 live preset，也不会接收 Telegram 交易命令。
     </p>
   </section>
 </template>
@@ -119,7 +102,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 
-defineEmits(['build', 'build-intent', 'build-hyperliquid']);
+defineEmits(['build', 'build-intent']);
 
 const props = defineProps({
   payload: {
@@ -134,10 +117,6 @@ const props = defineProps({
     type: Object,
     default: null,
   },
-  hyperliquidShadow: {
-    type: Object,
-    default: null,
-  },
   loading: {
     type: Boolean,
     default: false,
@@ -145,11 +124,8 @@ const props = defineProps({
 });
 
 const intentPrompt = ref('USDJPY 震荡短线，多空都做，低风险，回撤超过百分之十停手。');
-const targetAgentUrl = ref('');
-const targetAgentProfileJson = ref('');
 const state = computed(() => props.payload?.state || props.payload || {});
 const intentState = computed(() => props.intentPlan?.plan || props.intentPlan || {});
-const hyperliquidState = computed(() => props.hyperliquidShadow?.report || props.hyperliquidShadow || {});
 const eliteArchive = computed(() => state.value?.eliteArchive || {});
 const graveyard = computed(() => state.value?.graveyard || {});
 const lineageTree = computed(() => state.value?.lineageTree || {});
@@ -163,33 +139,24 @@ const candidateCount = computed(() => state.value?.candidateCount || 0);
 const eliteCount = computed(() => state.value?.eliteCount || eliteArchive.value?.eliteCount || 0);
 const graveyardCount = computed(() => state.value?.graveyardCount || graveyard.value?.graveyardCount || 0);
 const lineageNodeCount = computed(() => state.value?.lineageNodeCount || lineageTree.value?.nodeCount || 0);
-const evolutionLockText = computed(
-  () => (evolutionLockPolicy.value?.personalityLocked ? 'PERSONALITY_LOCKED' : 'WAITING_LOCK_POLICY'),
+const evolutionLockText = computed(() =>
+  evolutionLockPolicy.value?.personalityLocked ? 'PERSONALITY_LOCKED' : 'WAITING_LOCK_POLICY',
 );
 const tacticalMutationBoundsPct = computed(() => evolutionLockPolicy.value?.tacticalMutationBoundsPct ?? 30);
 const intentStatusText = computed(
-  () => intentState.value?.statusZh || intentState.value?.status || intentState.value?.inferredPersonality?.strategyFamily || 'WAITING_INTENT_PLAN',
+  () =>
+    intentState.value?.statusZh ||
+    intentState.value?.status ||
+    intentState.value?.inferredPersonality?.strategyFamily ||
+    'WAITING_INTENT_PLAN',
 );
 const intentValidSeedCount = computed(() => intentState.value?.validation?.validSeedCount || 0);
 const intentReasonText = computed(
-  () => intentState.value?.evolutionPolicy?.reasonZh || intentState.value?.reasonZh || '等待自然语言 intent plan。',
+  () =>
+    intentState.value?.evolutionPolicy?.reasonZh ||
+    intentState.value?.reasonZh ||
+    '等待自然语言 intent plan。',
 );
-const hyperliquidStatusText = computed(
-  () => hyperliquidState.value?.statusZh || hyperliquidState.value?.status || 'WAITING_HYPERLIQUID_SHADOW_BUILD',
-);
-const hyperliquidReasonText = computed(
-  () => hyperliquidState.value?.shadowPlan?.reasonZh || hyperliquidState.value?.blockers?.[0]?.reasonZh || '等待 Moss agent 链接。',
-);
-const hyperliquidMetricsText = computed(() => {
-  const metrics = hyperliquidState.value?.targetAgent?.metrics || {};
-  if (!metrics || Object.keys(metrics).length === 0) return '';
-  const items = [
-    metrics.roiPct === null || metrics.roiPct === undefined ? '' : `ROI ${metrics.roiPct}%`,
-    metrics.maxDrawdownPct === null || metrics.maxDrawdownPct === undefined ? '' : `回撤 ${metrics.maxDrawdownPct}%`,
-    metrics.liquidationCount === null || metrics.liquidationCount === undefined ? '' : `爆仓 ${metrics.liquidationCount}`,
-  ].filter(Boolean);
-  return items.length ? `指标：${items.join(' / ')}。` : '';
-});
 const eliteRows = computed(() => {
   const rows = eliteArchive.value?.elites || [];
   return Array.isArray(rows) ? rows.slice(0, 8) : [];

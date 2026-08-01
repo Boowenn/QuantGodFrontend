@@ -57,6 +57,20 @@ test('phase1Api POST calls use apiClient CSRF header and preserve metadata', asy
   });
 });
 
+test('phase1Api commands reject HTTP 200 payloads without explicit ok=true', async () => {
+  globalThis.fetch = async () => jsonResponse({ status: 'COMPLETED' });
+  await assert.rejects(
+    runAiAnalysis({ symbol: USDJPY_FOCUS_SYMBOL, timeframes: ['M15'] }),
+    /did not confirm ok=true/,
+  );
+
+  globalThis.fetch = async () => jsonResponse({ ok: false, error: 'analysis_blocked' });
+  await assert.rejects(
+    runAiAnalysis({ symbol: USDJPY_FOCUS_SYMBOL, timeframes: ['M15'] }),
+    /analysis_blocked/,
+  );
+});
+
 test('phase1Api returns fallback envelopes instead of throwing on backend failures', async () => {
   globalThis.fetch = async () => jsonResponse({ error: 'mt5_readonly_down' }, 503);
 

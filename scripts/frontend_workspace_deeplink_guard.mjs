@@ -94,16 +94,11 @@ for (const required of [
   'loadSnapshotHealthCore',
   'normalizeDashboardSnapshot',
   'buildSnapshotRootCauseBanner',
-  'buildSnapshotImpactSummary',
-  'buildFrontendSnapshotRecoveryRows',
-  'usableLine',
+  'buildOperatorOverviewAxisItems',
   'setInterval(load, 30000)',
-  '系统数据源',
-  'Snapshot bridge impact',
-  'Snapshot recovery priority',
-  'row.可信范围',
-  'row.核对端点',
-  'row.下一步',
+  '运行状态',
+  'MT5 六轴状态',
+  '查看原因',
 ]) {
   assertIncludes(snapshotHealthStrip, required, 'src/app/SnapshotHealthStrip.vue');
 }
@@ -120,9 +115,12 @@ const visibleNavigation = navigation.split('export const HIDDEN_WORKSPACES')[0] 
 assertNotIncludes(visibleNavigation, "key: 'legacy'", 'src/app/navigation.js visible navigation');
 assertNotIncludes(visibleNavigation, '旧版归档', 'src/app/navigation.js visible navigation');
 
-for (const key of ['dashboard', 'mt5', 'evolution', 'hfm-crypto']) {
+for (const key of ['dashboard', 'mt5', 'evolution']) {
   assertIncludes(navigation, `'${key}'`, 'src/app/navigation.js');
 }
+assertNotIncludes(navigation, 'hfm-crypto', 'src/app/navigation.js');
+assertIncludes(workspaceUrl, 'hfm-crypto', 'src/app/workspaceUrl.js');
+assertIncludes(workspaceUrl, 'mt5', 'src/app/workspaceUrl.js');
 
 const componentWorkspaceKeys = extractWorkspaceComponentKeys(registry);
 const navigationWorkspaceKeys = extractNavigationKeys(navigation);

@@ -4,7 +4,9 @@ import {
   buildCloseHistoryRows,
   buildEndpointHealth,
   buildMt5AccountCards,
+  buildMt5CoreMetrics,
   buildMt5Metrics,
+  buildMt5PrimaryAxisItems,
   buildMt5ExecutionFeedbackRows,
   buildMt5SimulationItems,
   buildMt5ShadowBlockerRows,
@@ -14,6 +16,7 @@ import {
   buildMt5SnapshotRecoveryRows,
   buildMt5SnapshotRootCauseBanner,
   buildMt5EvidenceOsLiteItems,
+  buildSafetyItems,
   buildMt5TodoRows,
   buildMt5ReviewRows,
   buildOrderRows,
@@ -25,7 +28,319 @@ import {
   normalizeMt5Snapshot,
 } from '../../src/workspaces/mt5/mt5Model.js';
 
+const TRUSTED_RUNTIME = Object.freeze({
+  gmtTime: '2026.07.30 12:00:00',
+  tickAgeSeconds: 2,
+  executionEnabled: true,
+  livePilotMode: true,
+  tradeAllowed: true,
+  terminalTradeAllowed: true,
+  programTradeAllowed: true,
+  accountTradeAllowed: true,
+  accountExpertTradeAllowed: true,
+  focusSymbolTradeAllowed: true,
+  pilotKillSwitch: false,
+  pilotStartupEntryGuardActive: false,
+});
+
+function withTrustedMt5Connections(payload = {}) {
+  const freshness = { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false };
+  const accountFor = (login) => ({
+    ok: true,
+    status: 'CONNECTED',
+    snapshotFresh: true,
+    _freshness: freshness,
+    account: { login, server: 'Synthetic-Demo' },
+  });
+  const snapshotFor = (login, extra = {}) => ({
+    ok: true,
+    snapshotFresh: true,
+    _freshness: freshness,
+    ...extra,
+    runtime: { ...TRUSTED_RUNTIME, ...(extra.runtime || {}) },
+    account: { login, server: 'Synthetic-Demo', ...(extra.account || {}) },
+  });
+
+  return {
+    ...payload,
+    account: accountFor('90000001'),
+    snapshot: snapshotFor('90000001', payload.snapshot),
+    secondaryAccount: accountFor('90000002'),
+    secondarySnapshot: snapshotFor('90000002', payload.secondarySnapshot),
+  };
+}
+
 describe('mt5Model ledgers', () => {
+  it('treats a disabled optional secondary lane as out of scope instead of unavailable', () => {
+    const disabledSecondary = {
+      ok: true,
+      status: 'DISABLED',
+      optional: true,
+      enabled: false,
+      snapshotFresh: true,
+      account: null,
+      hostProcess: { status: 'DISABLED', terminalProcessDetected: false },
+      _freshness: {
+        status: 'DISABLED',
+        fresh: true,
+        stale: false,
+        optional: true,
+        enabled: false,
+        blockers: [],
+      },
+      _api: { ok: true },
+    };
+    const primary = withTrustedMt5Connections({
+      secondaryAccount: disabledSecondary,
+      secondarySnapshot: disabledSecondary,
+      accountProfiles: {
+        profiles: {
+          profiles: [
+            { profileId: 'primary', role: 'primary', accountLogin: '90000001' },
+            { profileId: 'secondary-live16', role: 'secondary', accountLogin: '90000002' },
+          ],
+        },
+      },
+    });
+    primary.secondaryAccount = disabledSecondary;
+    primary.secondarySnapshot = disabledSecondary;
+    const snapshot = normalizeMt5Snapshot(primary);
+
+    expect(snapshot.secondaryEnabled).toBe(false);
+    expect(snapshot.accountConnections).toHaveLength(1);
+    expect(snapshot.accountProfiles).toHaveLength(1);
+    expect(buildMt5AccountCards(snapshot)).toHaveLength(1);
+    expect(buildMt5Metrics(snapshot).some((item) => item.label === '第二账号 EA')).toBe(false);
+    expect(buildMt5Metrics(snapshot).some((item) => item.label === '第二账号净值')).toBe(false);
+    expect(buildMt5SnapshotRecoveryRows(snapshot)).toHaveLength(1);
+    expect(buildMt5SnapshotRootCauseBanner(snapshot)).toMatchObject({ status: 'ok' });
+    expect(
+      buildEndpointHealth(primary).some((item) => item.endpoint.includes('mt5-readonly-secondary')),
+    ).toBe(false);
+  });
+
+  it('labels a connected Shadow / ReadOnly account as observation instead of missing permissions', () => {
+    const disabledSecondary = {
+      ok: true,
+      status: 'DISABLED',
+      optional: true,
+      enabled: false,
+      snapshotFresh: true,
+      account: null,
+      _freshness: {
+        status: 'DISABLED',
+        fresh: true,
+        stale: false,
+        optional: true,
+        enabled: false,
+        blockers: [],
+      },
+    };
+    const raw = withTrustedMt5Connections({
+      snapshot: {
+        runtime: {
+          executionEnabled: false,
+          livePilotMode: false,
+          tradeAllowed: false,
+          shadowMode: true,
+          readOnlyMode: true,
+        },
+      },
+    });
+    raw.secondaryAccount = disabledSecondary;
+    raw.secondarySnapshot = disabledSecondary;
+
+    const snapshot = normalizeMt5Snapshot(raw);
+    expect(buildMt5AccountCards(snapshot)[0]).toMatchObject({
+      statusLabel: 'Shadow / 只读观察',
+    });
+    expect(buildMt5PrimaryAxisItems(snapshot)).toHaveLength(6);
+    expect(buildMt5PrimaryAxisItems(snapshot).find((item) => item.label === '交易准备度')).toMatchObject({
+      value: 'Shadow / ReadOnly（不执行）',
+      status: 'warn',
+    });
+    expect(buildMt5CoreMetrics(snapshot).map((item) => item.label)).toEqual(['余额', '净值', '持仓', '挂单']);
+  });
+
+  it('never treats a fresh writer snapshot as broker connectivity or account authorization', () => {
+    const snapshot = normalizeMt5Snapshot({
+      account: {
+        ok: true,
+        snapshotFresh: true,
+        _freshness: { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false },
+        account: { login: '90000001', server: 'Synthetic-Demo' },
+      },
+      snapshot: {
+        ok: true,
+        snapshotFresh: true,
+        _freshness: { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false },
+        runtime: { gmtTime: '2026.07.30 12:00:00', tickAgeSeconds: 2 },
+        account: { login: '90000001', server: 'Synthetic-Demo' },
+      },
+      secondaryAccount: {
+        ok: true,
+        status: 'DISABLED',
+        optional: true,
+        enabled: false,
+        snapshotFresh: true,
+      },
+      secondarySnapshot: {
+        ok: true,
+        status: 'DISABLED',
+        optional: true,
+        enabled: false,
+        snapshotFresh: true,
+      },
+    });
+
+    expect(snapshot.primaryConnection).toMatchObject({
+      brokerConnected: false,
+      accountAuthorized: false,
+      writerFresh: true,
+      quoteFresh: true,
+      marketSession: 'MARKET_OPEN',
+      tradingReady: false,
+      connected: false,
+    });
+  });
+
+  it('shows MARKET_CLOSED on weekends without leaking frozen spread READY or HARD_WIDE states', () => {
+    const snapshot = normalizeMt5Snapshot(
+      withTrustedMt5Connections({
+        snapshot: {
+          runtime: { gmtTime: '2026.08.01 13:16:27', tickAgeSeconds: 58586 },
+          usdJpyRsiEntryDiagnostics: {
+            state: 'READY',
+            stateZh: '准备完成',
+            guards: { sessionOpen: true, spreadAllowed: false },
+          },
+        },
+        secondarySnapshot: {
+          runtime: { gmtTime: '2026.08.01 13:16:27', tickAgeSeconds: 58586 },
+        },
+        usdJpyLiveLoop: {
+          state: 'READY',
+          stateZh: '准备完成',
+          policy: {
+            spreadGate: { tier: 'HARD_WIDE', hardBlock: true, spreadPips: 5 },
+          },
+        },
+      }),
+    );
+    const rendered = JSON.stringify([
+      buildUsdJpyLiveLoopItems(snapshot),
+      buildRsiEntryDiagnosticRows(snapshot),
+      buildMt5AccountCards(snapshot),
+    ]);
+
+    expect(snapshot.primaryConnection).toMatchObject({
+      brokerConnected: true,
+      accountAuthorized: true,
+      writerFresh: true,
+      quoteFresh: false,
+      marketSession: 'MARKET_CLOSED',
+      tradingReady: false,
+    });
+    expect(snapshot).toMatchObject({ marketSession: 'MARKET_CLOSED', eaTradeReady: false });
+    expect(rendered).toContain('MARKET_CLOSED');
+    expect(rendered).not.toContain('HARD_WIDE');
+    expect(rendered).not.toContain('准备完成');
+  });
+
+  it('fails closed when any MT5 permission or guard evidence is missing', () => {
+    const account = {
+      ok: true,
+      status: 'CONNECTED',
+      snapshotFresh: true,
+      _freshness: { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false },
+      account: { login: '90000001', server: 'Synthetic-Demo' },
+    };
+    const incompleteSnapshot = {
+      ok: true,
+      snapshotFresh: true,
+      _freshness: { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false },
+      runtime: { executionEnabled: true, livePilotMode: true, tradeAllowed: true },
+      account: account.account,
+    };
+    const snapshot = normalizeMt5Snapshot({
+      account,
+      snapshot: incompleteSnapshot,
+      secondaryAccount: { ...account, account: { ...account.account, login: '90000002' } },
+      secondarySnapshot: {
+        ...incompleteSnapshot,
+        account: { ...account.account, login: '90000002' },
+      },
+    });
+
+    expect(snapshot.dualAccountAutoEnabled).toBe(false);
+    expect(snapshot.dualAccountEntryReady).toBe(false);
+    expect(snapshot.eaTradeReady).toBe(false);
+    expect(buildMt5AccountCards(snapshot)[0].items.find((item) => item.label === 'MT5 权限')).toMatchObject({
+      value: '证据不完整 / 已阻断',
+      status: 'blocked',
+    });
+    expect(buildSafetyItems(snapshot).find((item) => item.label === '熔断保护')).toMatchObject({
+      value: '状态未知 / 已阻断',
+      status: 'blocked',
+    });
+  });
+
+  it('requires every explicit permission true and both guards false before readiness can pass', () => {
+    const runtime = {
+      gmtTime: '2026.07.30 12:00:00',
+      tickAgeSeconds: 2,
+      executionEnabled: true,
+      livePilotMode: true,
+      tradeAllowed: true,
+      terminalTradeAllowed: true,
+      programTradeAllowed: true,
+      accountTradeAllowed: true,
+      accountExpertTradeAllowed: true,
+      focusSymbolTradeAllowed: true,
+      pilotKillSwitch: false,
+      pilotStartupEntryGuardActive: false,
+    };
+    const accountFor = (login) => ({
+      ok: true,
+      status: 'CONNECTED',
+      snapshotFresh: true,
+      _freshness: { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false },
+      account: { login, server: 'Synthetic-Demo' },
+    });
+    const snapshotFor = (login, overrides = {}) => ({
+      ok: true,
+      snapshotFresh: true,
+      _freshness: { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false },
+      runtime: { ...runtime, ...overrides },
+      account: { login, server: 'Synthetic-Demo' },
+    });
+    const ready = normalizeMt5Snapshot({
+      account: accountFor('90000001'),
+      snapshot: snapshotFor('90000001'),
+      secondaryAccount: accountFor('90000002'),
+      secondarySnapshot: snapshotFor('90000002'),
+    });
+    const blocked = normalizeMt5Snapshot({
+      account: accountFor('90000001'),
+      snapshot: snapshotFor('90000001', { focusSymbolTradeAllowed: false }),
+      secondaryAccount: accountFor('90000002'),
+      secondarySnapshot: snapshotFor('90000002'),
+    });
+
+    expect(ready.dualAccountAutoEnabled).toBe(true);
+    expect(ready.dualAccountEntryReady).toBe(true);
+    expect(ready.eaTradeReady).toBe(true);
+    expect(buildMt5AccountCards(ready)[0].items.find((item) => item.label === 'MT5 权限')).toMatchObject({
+      value: '全部通过',
+      status: 'ok',
+    });
+    expect(blocked.dualAccountAutoEnabled).toBe(false);
+    expect(buildMt5AccountCards(blocked)[0].items.find((item) => item.label === 'MT5 权限')).toMatchObject({
+      value: '有阻断',
+      status: 'blocked',
+    });
+  });
+
   it('shows the newest trade journal rows first even when the CSV is oldest-first', () => {
     const tradeJournal = Array.from({ length: 44 }, (_, index) => ({
       EventTime: `2026.04.23 ${String(index % 24).padStart(2, '0')}:00`,
@@ -71,8 +386,8 @@ describe('mt5Model ledgers', () => {
 
   it('keeps full broker trade history instead of hiding non-focus manual records', () => {
     const snapshot = normalizeMt5Snapshot({
-      account: { account: { login: '186054398', server: 'HFMarketsGlobal-Live12' } },
-      secondaryAccount: { account: { login: '198135388', server: 'HFMarketsGlobal-Live16' } },
+      account: { account: { login: '90000001', server: 'SyntheticBroker-Demo12' } },
+      secondaryAccount: { account: { login: '90000002', server: 'SyntheticBroker-Demo16' } },
       closeHistory: [
         { CloseTime: '2026.05.11 08:52', Symbol: 'XAUUSDc', NetProfit: '13.19', Strategy: 'Manual/Other' },
         { CloseTime: '2026.05.11 08:20', Symbol: 'EURUSDc', NetProfit: '-0.12', Strategy: 'Manual/Other' },
@@ -96,77 +411,77 @@ describe('mt5Model ledgers', () => {
       'EURUSDc',
       'USDJPYc',
     ]);
-    expect(buildCloseHistoryRows(snapshot)[0].账户).toBe('第二账号 198135388');
+    expect(buildCloseHistoryRows(snapshot)[0].账户).toBe('第二账号 ••••0002');
     expect(buildTradeJournalRows(snapshot).map((row) => row.品种)).toEqual(['USDJPY', 'XAUUSDc', 'USDJPYc']);
-    expect(buildTradeJournalRows(snapshot)[0].账户).toBe('第二账号 198135388');
+    expect(buildTradeJournalRows(snapshot)[0].账户).toBe('第二账号 ••••0002');
   });
 
   it('labels MT5 account cards as cent learning and USD deployment lanes', () => {
-    const snapshot = normalizeMt5Snapshot({
-      account: { account: { login: '186054398', server: 'HFMarketsGlobal-Live12', currency: 'USC' } },
-      secondaryAccount: {
-        account: { login: '198135388', server: 'HFMarketsGlobal-Live16', currency: 'USD' },
-      },
-      dailyAutopilot: {
-        accountRegistry: {
-          accounts: [
-            {
-              accountAlias: 'hfm_cent',
-              accountMode: 'cent',
-              laneZh: '美分账户学习车道',
-              purposeZh: '收集真实小仓执行样本',
-              allowedEntryModes: ['OPPORTUNITY_ENTRY', 'STANDARD_ENTRY'],
-            },
-            {
-              accountAlias: 'hfm_usd',
-              accountMode: 'standard_usd',
-              laneZh: '美元账户部署车道',
-              purposeZh: '只部署已验证结构',
-              allowedEntryModes: ['STANDARD_ENTRY'],
-            },
-          ],
-        },
-        morningPlan: {
-          accountLanes: {
-            centLive: {
-              accountMode: 'cent',
-              laneZh: '美分账户学习车道',
-              allowedEntryModes: ['OPPORTUNITY_ENTRY', 'STANDARD_ENTRY'],
-            },
-            usdDeployment: {
-              accountMode: 'standard_usd',
-              laneZh: '美元账户部署车道',
-              allowedEntryModes: ['STANDARD_ENTRY'],
-            },
+    const snapshot = normalizeMt5Snapshot(
+      withTrustedMt5Connections({
+        usdJpyLiveLoop: {
+          accountRegistry: {
+            accounts: [
+              {
+                accountAlias: 'hfm_cent',
+                accountMode: 'cent',
+                laneZh: '美分账户学习车道',
+                purposeZh: '收集真实小仓执行样本',
+                allowedEntryModes: ['OPPORTUNITY_ENTRY', 'STANDARD_ENTRY'],
+              },
+              {
+                accountAlias: 'hfm_usd',
+                accountMode: 'standard_usd',
+                laneZh: '美元账户部署车道',
+                purposeZh: '只部署已验证结构',
+                allowedEntryModes: ['STANDARD_ENTRY'],
+              },
+            ],
           },
-          spreadGate: {
-            spreadPips: 2.3,
-            tier: 'SOFT_WIDE',
-            tierZh: '轻微偏宽',
-            normalLimitPips: 2.2,
-            softLimitPips: 2.7,
-            hardLimitPips: 3.0,
-            centActionZh: '美分账户允许小仓机会入场。',
-            usdActionZh: '美元账户仅 paper mirror，不实盘。',
-          },
-          usdDeploymentGate: {
-            liveAllowed: false,
-            action: 'PAPER_MIRROR',
-            targetStage: 'USD_PAPER_MIRROR',
-            reasonZh:
-              '美元账户继续 mirror；只有美分账户验证和严格 STANDARD_ENTRY 条件全部通过后才切 USD_MICRO_LIVE。',
+          policy: {
+            accountLanePolicy: {
+              centLive: {
+                accountMode: 'cent',
+                laneZh: '美分账户学习车道',
+                allowedEntryModes: ['OPPORTUNITY_ENTRY', 'STANDARD_ENTRY'],
+              },
+              usdDeployment: {
+                accountMode: 'standard_usd',
+                laneZh: '美元账户部署车道',
+                allowedEntryModes: ['STANDARD_ENTRY'],
+              },
+            },
+            spreadGate: {
+              spreadPips: 2.3,
+              tier: 'SOFT_WIDE',
+              tierZh: '轻微偏宽',
+              normalLimitPips: 2.2,
+              softLimitPips: 2.7,
+              hardLimitPips: 3.0,
+              centActionZh: '美分账户允许小仓机会入场。',
+              usdActionZh: '美元账户仅 paper mirror，不实盘。',
+            },
+            usdDeploymentGate: {
+              liveAllowed: false,
+              action: 'PAPER_MIRROR',
+              targetStage: 'USD_PAPER_MIRROR',
+              reasonZh:
+                '美元账户继续 mirror；只有美分账户验证和严格 STANDARD_ENTRY 条件全部通过后才切 USD_MICRO_LIVE。',
+            },
           },
         },
-      },
-    });
+      }),
+    );
 
     const cards = buildMt5AccountCards(snapshot);
 
     expect(cards[0].title).toBe('美分账户学习车道');
     expect(cards[1].title).toBe('美元账户部署车道');
-    expect(cards[1].items.find((item) => item.label === '账户车道')?.hint).toContain('只部署已验证结构');
-    expect(cards[0].items.find((item) => item.label === '允许入场')?.value).toContain('OPPORTUNITY_ENTRY');
-    expect(cards[1].items.find((item) => item.label === '允许入场')?.hint).toContain('STANDARD_ENTRY');
+    expect(cards[1].items.find((item) => item.label === '账户车道')?.hint).toContain('当前新鲜守门证据');
+    expect(cards[0].items.find((item) => item.label === '允许信号模式')?.value).toContain(
+      'OPPORTUNITY_ENTRY',
+    );
+    expect(cards[1].items.find((item) => item.label === '允许信号模式')?.hint).toContain('当前守门');
     expect(cards[1].items.find((item) => item.label === 'USD 部署门')?.value).toContain('PAPER_MIRROR');
     expect(cards[1].items.find((item) => item.label === 'USD 部署门')?.hint).toContain('USD_MICRO_LIVE');
     expect(cards[0].items.find((item) => item.label === '点差门禁')).toMatchObject({
@@ -179,7 +494,11 @@ describe('mt5Model ledgers', () => {
 
   it('surfaces a cross-frontend MT5 snapshot recovery banner and matrix', () => {
     const snapshot = normalizeMt5Snapshot({
-      account: { account: { login: '186054398', server: 'HFMarketsGlobal-Live12', currency: 'USC' } },
+      account: {
+        ok: true,
+        snapshotFresh: true,
+        account: { login: '90000001', server: 'SyntheticBroker-Demo12', currency: 'USC' },
+      },
       snapshot: {
         ok: true,
         status: 'STALE_EA_SNAPSHOT',
@@ -202,7 +521,9 @@ describe('mt5Model ledgers', () => {
         },
       },
       secondaryAccount: {
-        account: { login: '198135388', server: 'HFMarketsGlobal-Live16', currency: 'USD' },
+        ok: true,
+        snapshotFresh: true,
+        account: { login: '90000002', server: 'SyntheticBroker-Demo16', currency: 'USD' },
       },
       secondarySnapshot: {
         ok: true,
@@ -227,17 +548,17 @@ describe('mt5Model ledgers', () => {
       label: 'MT5/EA writer 未运行',
       title: 'MT5 当前账号快照不能当作实时状态',
     });
-    expect(banner.rootCauseLine).toContain('主账号 / HFMarketsGlobal-Live12：writer 未运行');
-    expect(banner.evidenceLine).toContain('主账号 / HFMarketsGlobal-Live12：writer 未运行，10.1 天');
-    expect(banner.evidenceLine).toContain('第二账号 / HFMarketsGlobal-Live16：快照过期，10.1 天');
+    expect(banner.rootCauseLine).toContain('主账号 / SyntheticBroker-Demo12：writer 未运行');
+    expect(banner.evidenceLine).toContain('主账号 / SyntheticBroker-Demo12：writer 未运行，10.1 天');
+    expect(banner.evidenceLine).toContain('第二账号 / SyntheticBroker-Demo16：快照过期，10.1 天');
     expect(banner.blockedLine).toContain('当前持仓');
     expect(banner.usableLine).toContain('shadow 账本');
     expect(rows[0]).toMatchObject({
-      账户: '主账号 / HFMarketsGlobal-Live12',
+      账户: '主账号 / SyntheticBroker-Demo12',
       端点: '/api/mt5-readonly/snapshot',
       状态: 'writer 未运行',
       打开页面: '/vue/?workspace=mt5',
-      数据年龄: '主账号 / HFMarketsGlobal-Live12：writer 未运行，10.1 天 / 阈值 待确认',
+      数据年龄: '主账号 / SyntheticBroker-Demo12：writer 未运行，10.1 天 / 阈值 待确认',
       进程诊断: '未检测到 terminal64/wine 进程',
       验收标准: '对应只读桥 fresh=true，且 terminal64/wine 进程被检测到。',
     });
@@ -245,11 +566,11 @@ describe('mt5Model ledgers', () => {
     expect(rows[0].下一步).toContain('确认 Live12 HFM/MT5 终端正在运行');
     expect(rows[0].可信范围).toContain('旧快照只作历史参考');
     expect(rows[1]).toMatchObject({
-      账户: '第二账号 / HFMarketsGlobal-Live16',
+      账户: '第二账号 / SyntheticBroker-Demo16',
       端点: '/api/mt5-readonly-secondary/snapshot',
       状态: '快照过期',
       打开页面: '/vue/?workspace=mt5',
-      数据年龄: '第二账号 / HFMarketsGlobal-Live16：快照过期，10.1 天 / 阈值 待确认',
+      数据年龄: '第二账号 / SyntheticBroker-Demo16：快照过期，10.1 天 / 阈值 待确认',
       验收标准: '对应只读桥 fresh=true，且 terminal64/wine 进程被检测到。',
     });
     expect(rows[1].下一步).toContain('/api/mt5-readonly-secondary/snapshot');
@@ -297,39 +618,37 @@ describe('mt5Model ledgers', () => {
   });
 
   it('prefers latest live spread gate over stale daily autopilot spread snapshot', () => {
-    const snapshot = normalizeMt5Snapshot({
-      account: { account: { login: '186054398', server: 'HFMarketsGlobal-Live12', currency: 'USC' } },
-      secondaryAccount: {
-        account: { login: '198135388', server: 'HFMarketsGlobal-Live16', currency: 'USD' },
-      },
-      dailyAutopilot: {
-        morningPlan: {
-          spreadGate: {
-            spreadPips: 2.3,
-            tier: 'SOFT_WIDE',
-            tierZh: '轻微偏宽',
-            normalLimitPips: 2.2,
-            softLimitPips: 2.7,
-            hardLimitPips: 3.0,
+    const snapshot = normalizeMt5Snapshot(
+      withTrustedMt5Connections({
+        dailyAutopilot: {
+          morningPlan: {
+            spreadGate: {
+              spreadPips: 2.3,
+              tier: 'SOFT_WIDE',
+              tierZh: '轻微偏宽',
+              normalLimitPips: 2.2,
+              softLimitPips: 2.7,
+              hardLimitPips: 3.0,
+            },
           },
         },
-      },
-      usdJpyLiveLoop: {
-        policy: {
-          spreadGate: {
-            spreadPips: 2.9,
-            tier: 'SOFT_WIDE_HIGH',
-            tierZh: '偏宽较高',
-            normalLimitPips: 2.2,
-            softLimitPips: 2.7,
-            hardLimitPips: 3.0,
-            hardBlock: false,
-            centActionZh: '美分账户允许极小仓机会入场。',
-            usdActionZh: '美元账户仅 paper mirror，不实盘。',
+        usdJpyLiveLoop: {
+          policy: {
+            spreadGate: {
+              spreadPips: 2.9,
+              tier: 'SOFT_WIDE_HIGH',
+              tierZh: '偏宽较高',
+              normalLimitPips: 2.2,
+              softLimitPips: 2.7,
+              hardLimitPips: 3.0,
+              hardBlock: false,
+              centActionZh: '美分账户允许极小仓机会入场。',
+              usdActionZh: '美元账户仅 paper mirror，不实盘。',
+            },
           },
         },
-      },
-    });
+      }),
+    );
 
     const cards = buildMt5AccountCards(snapshot);
     const centSpread = cards[0].items.find((item) => item.label === '点差门禁');
@@ -377,9 +696,9 @@ describe('mt5Model ledgers', () => {
 
   it('does not render cent lane hints on an empty USD lane fallback', () => {
     const snapshot = normalizeMt5Snapshot({
-      account: { account: { login: '186054398', server: 'HFMarketsGlobal-Live12', currency: 'USC' } },
+      account: { account: { login: '90000001', server: 'SyntheticBroker-Demo12', currency: 'USC' } },
       secondaryAccount: {
-        account: { login: '198135388', server: 'HFMarketsGlobal-Live16', currency: 'USD' },
+        account: { login: '90000002', server: 'SyntheticBroker-Demo16', currency: 'USD' },
       },
     });
 
@@ -404,8 +723,8 @@ describe('mt5Model ledgers', () => {
       },
       account: {
         account: {
-          login: '186054398',
-          server: 'HFMarketsGlobal-Live12',
+          login: '90000001',
+          server: 'SyntheticBroker-Demo12',
           currency: 'USC',
           equity: 10020.5,
           balance: 10000,
@@ -416,8 +735,8 @@ describe('mt5Model ledgers', () => {
       },
       secondaryAccount: {
         account: {
-          login: '198135388',
-          server: 'HFMarketsGlobal-Live16',
+          login: '90000002',
+          server: 'SyntheticBroker-Demo16',
           currency: 'USD',
           equity: 998.25,
           balance: 1000,
@@ -450,9 +769,9 @@ describe('mt5Model ledgers', () => {
       value: '快照过期',
       status: 'warn',
     });
-    expect(centItems.find((item) => item.label === 'EA 自动交易')).toMatchObject({
-      value: '快照过期',
-      status: 'warn',
+    expect(centItems.find((item) => item.label === '后端执行守门')).toMatchObject({
+      value: '不可用 / 已阻断',
+      status: 'blocked',
       hint: '恢复主 MT5/EA 进程并刷新 QuantGod_Dashboard.json。',
     });
     expect(centItems.find((item) => item.label === '快照新鲜度')).toMatchObject({
@@ -491,8 +810,8 @@ describe('mt5Model ledgers', () => {
           nextAction: 'Restore the MT5 terminal/EA dashboard writer process.',
         },
         account: {
-          login: '186054398',
-          server: 'HFMarketsGlobal-Live12',
+          login: '90000001',
+          server: 'SyntheticBroker-Demo12',
           currency: 'USC',
           equity: 10020.5,
           balance: 10020.5,
@@ -582,7 +901,7 @@ describe('mt5Model ledgers', () => {
 
     expect(buildMt5AccountCards(snapshot)[0]).toMatchObject({
       status: 'blocked',
-      statusLabel: '快照缺失',
+      statusLabel: '状态未知 / 已阻断',
     });
     expect(endpointHealth.find((item) => item.endpoint === '/api/mt5-readonly/snapshot')).toMatchObject({
       status: 'blocked',
@@ -604,8 +923,8 @@ describe('mt5Model ledgers', () => {
       },
       account: {
         account: {
-          login: '186054398',
-          server: 'HFMarketsGlobal-Live12',
+          login: '90000001',
+          server: 'SyntheticBroker-Demo12',
           currency: 'USC',
           executionEnabled: true,
           livePilotMode: true,
@@ -614,8 +933,8 @@ describe('mt5Model ledgers', () => {
       },
       secondaryAccount: {
         account: {
-          login: '198135388',
-          server: 'HFMarketsGlobal-Live16',
+          login: '90000002',
+          server: 'SyntheticBroker-Demo16',
           currency: 'USD',
           executionEnabled: true,
           livePilotMode: true,
@@ -627,9 +946,9 @@ describe('mt5Model ledgers', () => {
     const centItems = buildMt5AccountCards(snapshot)[0].items;
 
     expect(snapshot.latestDashboardStale).toBe(false);
-    expect(centItems.find((item) => item.label === 'EA 自动交易')).toMatchObject({
-      value: '快照待确认',
-      status: 'warn',
+    expect(centItems.find((item) => item.label === '后端执行守门')).toMatchObject({
+      value: '不可用 / 已阻断',
+      status: 'blocked',
       hint: '等待 /api/latest 返回 mtime 新鲜度。',
     });
     expect(centItems.find((item) => item.label === '快照新鲜度')).toMatchObject({
@@ -650,8 +969,8 @@ describe('mt5Model ledgers', () => {
       },
       account: {
         account: {
-          login: '186054398',
-          server: 'HFMarketsGlobal-Live12',
+          login: '90000001',
+          server: 'SyntheticBroker-Demo12',
           currency: 'USC',
           equity: 10020.5,
           balance: 10000,
@@ -669,8 +988,8 @@ describe('mt5Model ledgers', () => {
           nextAction: 'Restore Live16 EA dashboard writer.',
         },
         account: {
-          login: '198135388',
-          server: 'HFMarketsGlobal-Live16',
+          login: '90000002',
+          server: 'SyntheticBroker-Demo16',
           currency: 'USD',
           equity: 16.33,
           balance: 16.33,
@@ -731,9 +1050,9 @@ describe('mt5Model ledgers', () => {
 
   it('merges secondary USD account live positions into the realtime positions table', () => {
     const snapshot = normalizeMt5Snapshot({
-      account: { account: { login: '186054398', server: 'HFMarketsGlobal-Live12', currency: 'USC' } },
+      account: { account: { login: '90000001', server: 'SyntheticBroker-Demo12', currency: 'USC' } },
       secondaryAccount: {
-        account: { login: '198135388', server: 'HFMarketsGlobal-Live16', currency: 'USD' },
+        account: { login: '90000002', server: 'SyntheticBroker-Demo16', currency: 'USD' },
       },
       positions: {
         items: [
@@ -765,7 +1084,7 @@ describe('mt5Model ledgers', () => {
 
     expect(rows).toHaveLength(2);
     expect(rows[1]).toMatchObject({
-      账户: '第二账号 198135388',
+      账户: '第二账号 ••••0002',
       票号: 1551939838,
       品种: 'XAUUSD',
       浮盈: -31.17,
@@ -835,88 +1154,97 @@ describe('mt5Model ledgers', () => {
   });
 
   it('explains live universe, shadow universe, tester window and Vibe-only strategy state', () => {
-    const snapshot = normalizeMt5Snapshot({
-      latest: {
-        strategies: {
-          RSI_Reversal: { enabled: true, active: true, riskMultiplier: 1, reason: 'Waiting for next H1 bar' },
+    const snapshot = normalizeMt5Snapshot(
+      withTrustedMt5Connections({
+        latest: {
+          strategies: {
+            RSI_Reversal: {
+              enabled: true,
+              active: true,
+              riskMultiplier: 1,
+              reason: 'Waiting for next H1 bar',
+            },
+          },
         },
-      },
-      snapshot: {
-        runtime: {
-          tradeAllowed: true,
-          executionEnabled: true,
-          pilotKillSwitch: false,
-          pilotStartupEntryGuardActive: false,
+        snapshot: {
+          runtime: {
+            tradeAllowed: true,
+            executionEnabled: true,
+            pilotKillSwitch: false,
+            pilotStartupEntryGuardActive: false,
+          },
         },
-      },
-      dailyReview: {
-        summary: {
-          todayTodoStatus: 'SCHEDULED_FOR_TESTER_WINDOW',
-          nextTesterWindowLabel: '2026-05-04 20:10-23:30 JST',
+        dailyReview: {
+          summary: {
+            todayTodoStatus: 'SCHEDULED_FOR_TESTER_WINDOW',
+            nextTesterWindowLabel: '2026-05-04 20:10-23:30 JST',
+          },
+          actionQueue: [{ candidateId: 'RSI_Reversal_USDJPYc_rsi_ultra_extreme_guard' }],
         },
-        actionQueue: [{ candidateId: 'RSI_Reversal_USDJPYc_rsi_ultra_extreme_guard' }],
-      },
-      researchStats: {
-        summary: {
-          liveUniverseLabel: 'USDJPYc',
-          shadowResearchUniverseLabel: 'USDJPYc / EURUSDc / XAUUSDc',
+        researchStats: {
+          summary: {
+            liveUniverseLabel: 'USDJPYc',
+            shadowResearchUniverseLabel: 'USDJPYc / EURUSDc / XAUUSDc',
+          },
         },
-      },
-      governanceAdvisor: {
-        summary: {
-          shadowRows: 671,
-          candidateRows: 227,
-          candidateOutcomeRows: 375,
-          paramLabResultParsed: 59,
-          versionGatePromoteCandidates: 0,
-          strategyVersionCount: 5,
+        governanceAdvisor: {
+          summary: {
+            shadowRows: 671,
+            candidateRows: 227,
+            candidateOutcomeRows: 375,
+            paramLabResultParsed: 59,
+            versionGatePromoteCandidates: 0,
+            strategyVersionCount: 5,
+          },
         },
-      },
-    });
+      }),
+    );
 
     const items = buildMt5SimulationItems(snapshot);
 
-    expect(items.find((item) => item.label === '实盘Universe')?.value).toBe('USDJPYc');
+    expect(items.find((item) => item.label === '执行守门 Universe（只读）')?.value).toBe('USDJPYc');
     expect(items.find((item) => item.label === '模拟Universe')?.value).toBe('USDJPYc');
-    expect(items.find((item) => item.label === '当前实盘策略')?.value).toBe('RSI 买入侧观察');
+    expect(items.find((item) => item.label === '当前策略证据')?.value).toBe('RSI 买入侧观察');
     expect(items.find((item) => item.label === '今日待办')?.hint).toContain('20:10-23:30');
     expect(items.find((item) => item.label === '缠论/MACD-TD')?.value).toContain('尚未进入');
   });
 
   it('treats an enabled RSI route waiting for signal as live observation', () => {
-    const snapshot = normalizeMt5Snapshot({
-      latest: {
-        strategies: {
-          RSI_Reversal: {
-            enabled: true,
-            active: false,
-            runtimeLabel: 'ON',
-            status: 'WAIT_SIGNAL',
-            riskMultiplier: 1,
-            reason: 'Waiting for first H1 RSI evaluation',
+    const snapshot = normalizeMt5Snapshot(
+      withTrustedMt5Connections({
+        latest: {
+          strategies: {
+            RSI_Reversal: {
+              enabled: true,
+              active: false,
+              runtimeLabel: 'ON',
+              status: 'WAIT_SIGNAL',
+              riskMultiplier: 1,
+              reason: 'Waiting for first H1 RSI evaluation',
+            },
           },
         },
-      },
-      snapshot: {
-        runtime: {
-          tradeAllowed: true,
-          executionEnabled: true,
-          pilotKillSwitch: false,
-          pilotStartupEntryGuardActive: false,
+        snapshot: {
+          runtime: {
+            tradeAllowed: true,
+            executionEnabled: true,
+            pilotKillSwitch: false,
+            pilotStartupEntryGuardActive: false,
+          },
         },
-      },
-      researchStats: {
-        summary: {
-          liveUniverseLabel: 'USDJPYc',
-          shadowResearchUniverseLabel: 'USDJPYc',
+        researchStats: {
+          summary: {
+            liveUniverseLabel: 'USDJPYc',
+            shadowResearchUniverseLabel: 'USDJPYc',
+          },
         },
-      },
-    });
+      }),
+    );
 
     const items = buildMt5SimulationItems(snapshot);
 
-    expect(items.find((item) => item.label === '当前实盘策略')?.value).toBe('RSI 买入侧观察');
-    expect(items.find((item) => item.label === '当前实盘策略')?.status).toBe('ok');
+    expect(items.find((item) => item.label === '当前策略证据')?.value).toBe('RSI 买入侧观察');
+    expect(items.find((item) => item.label === '当前策略证据')?.status).toBe('ok');
   });
 
   it('builds a readable MT5 shadow ledger with pips equity and trade rows', () => {
@@ -1207,7 +1535,7 @@ describe('mt5Model ledgers', () => {
 
     expect(items.find((item) => item.label === '主阻断原因')?.value).toContain('高冲击新闻窗口');
     expect(items.find((item) => item.label === '主阻断原因')?.value).not.toBe('模拟观察');
-    expect(items.find((item) => item.label === '实盘候选策略')?.hint).toContain('高冲击新闻窗口');
+    expect(items.find((item) => item.label === 'Shadow 候选策略')?.hint).toContain('高冲击新闻窗口');
   });
 
   it('falls back to the EA RSI diagnostic blocker when policy text is vague', () => {

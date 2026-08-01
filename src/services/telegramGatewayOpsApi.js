@@ -1,4 +1,4 @@
-import { fetchJson, postJson } from './apiClient.js';
+import { fetchJson, postCommandJson } from './apiClient.js';
 
 const BASE = '/api/telegram-gateway';
 
@@ -7,7 +7,7 @@ export function fetchTelegramGatewayOpsStatus(options = {}) {
 }
 
 export function collectTelegramGatewayOps() {
-  return postJson(`${BASE}/collect`, { focusSymbol: 'USDJPYc' });
+  return postCommandJson(`${BASE}/collect`, { focusSymbol: 'USDJPYc' });
 }
 
 export function fetchTelegramGatewayOpsTelegramText({ refresh = false } = {}) {

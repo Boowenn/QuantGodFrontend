@@ -34,7 +34,7 @@
         </article>
         <article>
           <span>最高允许仓位</span>
-          <strong>{{ formatLot(status?.maxLot ?? 2) }}</strong>
+          <strong>{{ formatLot(status?.maxLot) }}</strong>
         </article>
       </div>
 
@@ -43,7 +43,7 @@
           <p class="qg-usdjpy-panel__eyebrow">实盘 EA 恢复状态</p>
           <h3>{{ liveLoop?.stateZh || '等待 USDJPY 实盘闭环证据' }}</h3>
           <p>
-            {{ liveLoop?.liveRouteZh || '只允许 RSI_Reversal 买入路线由现有 EA 评估；其他路线保持模拟。' }}
+            {{ liveLoop?.liveRouteZh || '实盘路线证据不可用；保持阻断并等待后端明确返回。' }}
           </p>
         </div>
         <div class="qg-usdjpy-panel__live-grid">
@@ -56,7 +56,7 @@
           <span :class="evidenceClass(liveLoop?.policyReady)"
             >政策就绪 {{ boolLabel(liveLoop?.policyReady) }}</span
           >
-          <span>自动仓位上限 {{ liveLoop?.maxEaPositions ?? 2 }}，人工仓位不计入</span>
+          <span>自动仓位上限 {{ formatCount(liveLoop?.maxEaPositions) }}，人工仓位不计入</span>
         </div>
         <ul v-if="liveWhyNoEntry.length">
           <li v-for="reason in liveWhyNoEntry" :key="reason">{{ reason }}</li>
@@ -209,7 +209,9 @@
         <article class="qg-usdjpy-panel__table-card">
           <div class="qg-usdjpy-panel__section-title">
             <h3>风险检查</h3>
-            <span :class="evidenceClass(riskOk)">{{ riskOk ? '通过' : '等待证据' }}</span>
+            <span data-testid="risk-decision" :class="evidenceClass(riskOk)">
+              {{ riskOk ? 'PASS' : 'BLOCKED' }}
+            </span>
           </div>
           <ul class="qg-usdjpy-panel__evidence">
             <li :class="evidenceClass(riskCheck?.runtimeOk)">
@@ -310,8 +312,8 @@ const importedBacktests = computed(() => {
 });
 const riskOk = computed(() => {
   if (!riskCheck.value) return false;
-  if (riskCheck.value.ok === false || riskCheck.value.riskOk === false) return false;
-  return ['runtimeOk', 'fastlaneOk', 'newsOk', 'shadowOnly'].every((key) => riskCheck.value?.[key] !== false);
+  if (riskCheck.value.ok !== true || riskCheck.value.riskOk !== true) return false;
+  return ['runtimeOk', 'fastlaneOk', 'newsOk', 'shadowOnly'].every((key) => riskCheck.value?.[key] === true);
 });
 const liveWhyNoEntry = computed(() =>
   Array.isArray(liveLoop.value?.whyNoEntry) ? liveLoop.value.whyNoEntry.slice(0, 5) : [],
@@ -345,16 +347,27 @@ function pillClass(mode) {
 }
 
 function evidenceClass(ok) {
-  return ok ? 'qg-usdjpy-ok' : 'qg-usdjpy-bad';
+  if (ok === true) return 'qg-usdjpy-ok';
+  if (ok === false) return 'qg-usdjpy-bad';
+  return 'qg-usdjpy-unknown';
 }
 
 function boolLabel(ok) {
-  return ok ? '通过' : '缺失或未通过';
+  if (ok === true) return 'PASS';
+  if (ok === false) return 'BLOCKED';
+  return 'UNKNOWN';
 }
 
 function formatLot(value) {
-  const number = Number(value || 0);
-  return number.toFixed(2);
+  if (value == null || value === '') return '不可用';
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : '不可用';
+}
+
+function formatCount(value) {
+  if (value == null || value === '') return '不可用';
+  const number = Number(value);
+  return Number.isFinite(number) ? String(number) : '不可用';
 }
 
 function formatScore(value) {
@@ -708,6 +721,10 @@ onMounted(load);
 
 .qg-usdjpy-bad {
   color: #fecaca;
+}
+
+.qg-usdjpy-unknown {
+  color: #fde68a;
 }
 
 .qg-usdjpy-panel__factory {

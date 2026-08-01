@@ -1,4 +1,4 @@
-import { fetchJsonOrFallback, postJsonOrFallback } from './apiClient.js';
+import { fetchJsonOrFallback, postCommandJson } from './apiClient.js';
 
 export const USDJPY_FOCUS_SYMBOL = 'USDJPYc';
 
@@ -7,14 +7,13 @@ const USDJPY_SYMBOL_FALLBACK = [
 ];
 
 const FETCH_FALLBACK = Object.freeze({ ok: false, error: 'phase1_fetch_failed' });
-const POST_FALLBACK = Object.freeze({ ok: false, error: 'phase1_post_failed' });
 
 function fetchPhase1Json(path, options = {}) {
   return fetchJsonOrFallback(path, FETCH_FALLBACK, options);
 }
 
 function postPhase1Json(path, payload = {}, options = {}) {
-  return postJsonOrFallback(path, payload || {}, POST_FALLBACK, options);
+  return postCommandJson(path, payload || {}, options);
 }
 
 function isUsdJpySymbol(value) {

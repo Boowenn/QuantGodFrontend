@@ -24,7 +24,7 @@
       <a-card :title="activeGroup.label" :bordered="false" class="phase2-card phase2-data-card">
         <template #extra>
           <a-space class="phase2-actions">
-            <a-button size="small" @click="loadActive" :loading="loading">刷新</a-button>
+            <a-button size="small" :loading="loading" @click="loadActive">刷新</a-button>
             <a-tag v-if="lastLoaded">{{ lastLoaded }}</a-tag>
           </a-space>
         </template>
@@ -108,7 +108,8 @@
         <a-card title="AI 运维推送" :bordered="false" class="phase2-card">
           <div class="phase2-notify">
             <p class="phase2-card-note">
-              读取 MT5、HFM Crypto、治理和每日复盘证据，生成中文建议后只推送到 Telegram；不会接收命令，也不会触发交易。
+              读取 USDJPY MT5、治理和每日复盘证据，生成中文建议后只推送到
+              Telegram；不会接收命令，也不会触发交易。
             </p>
             <div class="phase2-loop-tags">
               <span>只读证据</span>
@@ -127,21 +128,19 @@
               </label>
             </div>
             <div class="phase2-button-row">
-              <a-button @click="runAiOps(false)" :loading="opsLoading">演练生成建议</a-button>
-              <a-button type="primary" @click="runAiOps(true)" :loading="opsLoading">
+              <a-button :loading="opsLoading" @click="runAiOps(false)">演练生成建议</a-button>
+              <a-button type="primary" :loading="opsLoading" @click="runAiOps(true)">
                 AI 分析并推送
               </a-button>
-              <a-button @click="sendDigest(false)" :loading="opsLoading">推送每日摘要</a-button>
-              <a-button @click="runRuntimeScan(true)" :loading="opsLoading">普通扫描演练</a-button>
+              <a-button :loading="opsLoading" @click="sendDigest(false)">推送每日摘要</a-button>
+              <a-button :loading="opsLoading" @click="runRuntimeScan(true)">普通扫描演练</a-button>
             </div>
             <a-alert
               v-if="notifyConfig"
               :type="notifyConfig.telegramConfigured ? 'success' : 'warning'"
               show-icon
               :message="
-                notifyConfig.telegramConfigured
-                  ? 'Telegram 通道已连接'
-                  : 'Telegram Token / Chat ID 未配置'
+                notifyConfig.telegramConfigured ? 'Telegram 通道已连接' : 'Telegram Token / Chat ID 未配置'
               "
               description="AI 推送会复用这个通道；页面不会接收 Telegram 命令。"
             />
@@ -261,29 +260,38 @@ async function loadNotify() {
 }
 
 async function runAiOps(send) {
-  opsLoading.value = true;
-  opsResult.value = await runMt5AiMonitor({
-    send,
-    dryRun: !send,
-    symbols: monitorSymbols.value,
-    timeframes: monitorTimeframes.value,
-  });
-  notifyHistory.value = await loadNotifyHistory(50);
-  opsLoading.value = false;
+  await runOpsCommand(() =>
+    runMt5AiMonitor({
+      send,
+      dryRun: !send,
+      symbols: monitorSymbols.value,
+      timeframes: monitorTimeframes.value,
+    }),
+  );
 }
 
 async function sendDigest(dryRun) {
-  opsLoading.value = true;
-  opsResult.value = await sendNotifyDailyDigest(dryRun);
-  notifyHistory.value = await loadNotifyHistory(50);
-  opsLoading.value = false;
+  await runOpsCommand(() => sendNotifyDailyDigest(dryRun));
 }
 
 async function runRuntimeScan(dryRun) {
+  await runOpsCommand(() => sendNotifyRuntimeScan(dryRun));
+}
+
+async function runOpsCommand(command) {
   opsLoading.value = true;
-  opsResult.value = await sendNotifyRuntimeScan(dryRun);
-  notifyHistory.value = await loadNotifyHistory(50);
-  opsLoading.value = false;
+  try {
+    opsResult.value = await command();
+    notifyHistory.value = await loadNotifyHistory(50);
+  } catch (error) {
+    opsResult.value = {
+      ok: false,
+      status: 'FAILED',
+      error: error?.message || String(error),
+    };
+  } finally {
+    opsLoading.value = false;
+  }
 }
 
 function formatCell(value) {
@@ -320,7 +328,8 @@ function describeOpsDetail(result) {
   const items = Array.isArray(result.items) ? result.items : [];
   const firstItem = items[0] || {};
   const decision = firstItem.decision?.action || firstItem.decision?.recommendation || firstItem.reason;
-  const source = firstItem.source?.symbol || firstItem.symbol || aiMonitorConfig.value?.defaultSymbols || '全部监听对象';
+  const source =
+    firstItem.source?.symbol || firstItem.symbol || aiMonitorConfig.value?.defaultSymbols || '全部监听对象';
   if (decision) return `${source}：${formatDisplayValue(decision, { max: 120 })}`;
   if (result.record?.messagePreview) return formatDisplayValue(result.record.messagePreview, { max: 140 });
   return '已写入本地通知记录；Telegram 通道保持 push-only。';

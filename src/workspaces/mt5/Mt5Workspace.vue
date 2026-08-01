@@ -1,33 +1,31 @@
 <template>
   <WorkspaceFrame
-    eyebrow="MT5 实盘监控"
-    title="MT5 实时交易面板"
-    description="查看 HFM 账户净值、当前持仓、历史交易、策略状态、今日待办和每日复盘；前端只观察证据，EA 是否可入场以 MT5 守门状态为准。"
+    eyebrow="MT5 Shadow / ReadOnly"
+    title="MT5 只读证据面板"
+    description="先看市场、六轴、账户关键数和当前仓位；诊断与历史证据按需展开。"
     :loading="loading"
     :error="error"
     @refresh="load"
   >
     <div class="qg-readonly-banner">
-      <StatusPill
-        :status="snapshot.dualAccountAutoEnabled ? 'ok' : 'warn'"
-        :label="snapshot.dualAccountAutoEnabled ? '双账号EA已开启' : '仍有账号等待EA权限'"
-      />
+      <StatusPill :status="readonlyBannerStatus" :label="readonlyBannerLabel" />
       <span
-        >前端数据桥保持只读，不会发单；两个 MT5 终端是否真正入场仍以各自 EA 的
-        session、新闻、点差、熔断、启动保护和单仓风控为准。</span
+        >前端数据桥保持 Shadow / ReadOnly，不会发单；账号连接、writer
+        与报价新鲜度分别显示，休市报价静止不会被当成账号掉线。</span
       >
     </div>
 
     <section class="qg-snapshot-root-cause" :class="`qg-snapshot-root-cause--${snapshotRootCause.status}`">
       <div class="qg-snapshot-root-cause__main">
-        <p class="qg-eyebrow">全局快照恢复</p>
+        <!-- Guard marker: 全局快照恢复。可见标题使用更短的运营语言。 -->
+        <p class="qg-eyebrow">状态结论</p>
         <h2>{{ snapshotRootCause.title }}</h2>
         <p>{{ snapshotRootCause.rootCauseLine }}</p>
       </div>
       <StatusPill :status="snapshotRootCause.status" :label="snapshotRootCause.label" />
       <div class="qg-snapshot-root-cause__grid">
         <span>
-          <strong>当前不可直接信任</strong>
+          <strong>{{ snapshotRootCause.status === 'ok' ? '当前可信范围' : '当前不可直接信任' }}</strong>
           {{ snapshotRootCause.blockedLine }}
         </span>
         <span>
@@ -45,260 +43,271 @@
       </div>
     </section>
 
-    <section class="qg-section-card qg-section-card--operator">
+    <section class="qg-section-card qg-mt5-core-status">
       <header>
-        <p class="qg-eyebrow">整体前端诊断</p>
-        <h2>MT5 快照恢复矩阵</h2>
+        <div>
+          <p class="qg-eyebrow">模式与市场</p>
+          <h2>连接、授权与只读就绪</h2>
+        </div>
+        <StatusPill :status="runtimeSummaryStatus" :label="runtimeSummaryLabel" />
       </header>
-      <LedgerTable
-        title="Live12 / Live16 只读桥"
-        :rows="snapshotRecoveryRows"
-        :limit="4"
-        class="qg-ledger-table--important qg-ledger-table--mt5-full"
-      />
+      <KeyValueList :items="primaryAxisItems" />
     </section>
 
-    <section class="qg-mt5-dual-accounts" aria-label="MT5 双账号 EA 状态">
-      <header class="qg-mt5-dual-accounts__header">
-        <div>
-          <p class="qg-eyebrow">Dual MT5 Runtime</p>
-          <h2>双账号 EA 运行概览</h2>
-        </div>
-        <StatusPill
-          :status="snapshot.dualAccountEntryReady ? 'ok' : snapshot.dualAccountAutoEnabled ? 'warn' : 'error'"
-          :label="
-            snapshot.dualAccountEntryReady
-              ? '双账号可入场'
-              : snapshot.dualAccountAutoEnabled
-                ? '双账号EA已开，等待守门'
-                : '双账号EA未完全开启'
-          "
-        />
-      </header>
-      <div class="qg-mt5-account-cards">
-        <article v-for="account in mt5AccountCards" :key="account.role" class="qg-mt5-account-card">
-          <div class="qg-mt5-account-card__header">
+    <MetricGrid :items="coreMetrics" />
+
+    <div class="qg-mt5-core-operations">
+      <LedgerTable title="实时持仓" :rows="positionRows" :limit="10" />
+      <LedgerTable title="挂单状态" :rows="orderRows" :limit="10" />
+      <LedgerTable title="主要阻断" :rows="shadowBlockerRows" :limit="3" />
+    </div>
+
+    <details class="qg-mt5-progressive">
+      <summary>
+        <span>账户登记与快照诊断</span>
+        <small>按需查看恢复矩阵、账户卡与 Profiles</small>
+      </summary>
+      <div class="qg-mt5-progressive__content">
+        <section class="qg-section-card qg-section-card--operator">
+          <header>
+            <p class="qg-eyebrow">快照诊断</p>
+            <h2>当前账号数据是否可信</h2>
+          </header>
+          <LedgerTable
+            :title="snapshot.secondaryEnabled ? '双账号只读桥' : '当前账号只读桥'"
+            :rows="snapshotRecoveryRows"
+            :limit="4"
+            class="qg-ledger-table--important qg-ledger-table--mt5-full"
+          />
+        </section>
+
+        <section
+          class="qg-mt5-dual-accounts"
+          :aria-label="snapshot.secondaryEnabled ? 'MT5 双账号 EA 状态' : 'MT5 主账号 EA 状态'"
+        >
+          <header class="qg-mt5-dual-accounts__header">
             <div>
-              <p class="qg-eyebrow">{{ account.eyebrow }}</p>
-              <h3>{{ account.title }}</h3>
-              <p>{{ account.subtitle }}</p>
+              <p class="qg-eyebrow">账户详情</p>
+              <h2>{{ snapshot.secondaryEnabled ? '双账号运行概览' : '主账号运行概览' }}</h2>
             </div>
-            <StatusPill :status="account.status" :label="account.statusLabel" />
+            <StatusPill :status="runtimeSummaryStatus" :label="runtimeSummaryLabel" />
+          </header>
+          <div class="qg-mt5-account-cards">
+            <article v-for="account in mt5AccountCards" :key="account.role" class="qg-mt5-account-card">
+              <div class="qg-mt5-account-card__header">
+                <div>
+                  <p class="qg-eyebrow">{{ account.eyebrow }}</p>
+                  <h3>{{ account.title }}</h3>
+                  <p>{{ account.subtitle }}</p>
+                </div>
+                <StatusPill :status="account.status" :label="account.statusLabel" />
+              </div>
+              <KeyValueList :items="account.items" />
+              <p class="qg-section-note">{{ account.note }}</p>
+            </article>
           </div>
-          <KeyValueList :items="account.items" />
-          <p class="qg-section-note">{{ account.note }}</p>
-        </article>
-      </div>
-    </section>
+        </section>
 
-    <div class="qg-domain-grid qg-domain-grid--two">
-      <section class="qg-section-card qg-section-card--operator">
-        <header>
-          <p class="qg-eyebrow">账号连接矩阵</p>
-          <h2>当前连接与双账号登记</h2>
-        </header>
-        <KeyValueList :items="connectionItems" />
-        <p class="qg-section-note">这里显示的是只读证据；EA 自动交易是否可入场仍以各终端守门状态为准。</p>
-      </section>
-
-      <LedgerTable
-        title="MT5 账号 Profiles"
-        :rows="accountProfileRows"
-        :limit="8"
-        class="qg-ledger-table--important qg-ledger-table--mt5-fit"
-      />
-    </div>
-
-    <MetricGrid :items="metrics" />
-
-    <section class="qg-section-card qg-section-card--operator">
-      <header>
-        <p class="qg-eyebrow">USDJPY Live Loop</p>
-        <h2>USDJPY 实盘 EA 恢复状态</h2>
-      </header>
-      <KeyValueList :items="usdJpyLiveLoopItems" />
-    </section>
-
-    <section class="qg-section-card qg-section-card--operator">
-      <header>
-        <p class="qg-eyebrow">Evidence OS</p>
-        <h2>执行反馈与下一代修复</h2>
-      </header>
-      <KeyValueList :items="evidenceOsLiteItems" />
-    </section>
-
-    <LedgerTable
-      title="Live Execution Feedback"
-      :rows="executionFeedbackRows"
-      :limit="20"
-      class="qg-ledger-table--important qg-ledger-table--mt5-full"
-    />
-
-    <LedgerTable
-      title="RSI 入场诊断"
-      :rows="rsiEntryDiagnosticRows"
-      :limit="14"
-      class="qg-ledger-table--important qg-ledger-table--mt5-full"
-    />
-
-    <section class="qg-section-card qg-section-card--operator qg-mt5-kline-panel">
-      <header class="qg-mt5-kline-panel__header">
-        <div>
-          <p class="qg-eyebrow">USDJPY 专业图表</p>
-          <h2>USDJPY K线与只读交易证据</h2>
+        <div class="qg-domain-grid">
+          <section class="qg-section-card">
+            <header>
+              <p class="qg-eyebrow">连接摘要</p>
+              <h2>当前账号与凭据边界</h2>
+            </header>
+            <KeyValueList :items="connectionItems" />
+          </section>
         </div>
-        <button v-if="!klineLoaded" type="button" class="qg-button" @click="enableKline">加载图表</button>
-      </header>
-      <Suspense v-if="klineLoaded">
-        <KlineWorkspace />
-        <template #fallback>
-          <LoadingState title="正在加载 K 线图" description="图表引擎和实时轮询正在按需启动。" />
-        </template>
-      </Suspense>
-      <p v-else class="qg-section-note">K 线图按需加载，避免首屏占用图表引擎内存。</p>
-    </section>
+      </div>
+    </details>
 
-    <EndpointHealthGrid :items="endpointHealth" />
+    <details class="qg-mt5-progressive">
+      <summary>
+        <span>策略守门与图表</span>
+        <small>按需查看策略诊断、执行反馈与 K 线</small>
+      </summary>
+      <div class="qg-mt5-progressive__content">
+        <section class="qg-section-card qg-section-card--operator">
+          <header>
+            <p class="qg-eyebrow">USDJPY Live Loop</p>
+            <h2>USDJPY Shadow / ReadOnly 守门状态</h2>
+          </header>
+          <KeyValueList :items="usdJpyLiveLoopItems" />
+        </section>
 
-    <section class="qg-section-card qg-section-card--operator">
-      <header>
-        <p class="qg-eyebrow">实盘 / 模拟一眼看懂</p>
-        <h2>现在系统在做什么</h2>
-      </header>
-      <KeyValueList :items="simulationItems" />
-    </section>
+        <section class="qg-section-card qg-section-card--operator">
+          <header>
+            <p class="qg-eyebrow">Evidence OS</p>
+            <h2>执行反馈与下一代修复</h2>
+          </header>
+          <KeyValueList :items="evidenceOsLiteItems" />
+        </section>
 
-    <section class="qg-section-card qg-section-card--operator">
-      <header>
-        <p class="qg-eyebrow">MT5 Shadow 账本</p>
-        <h2>模拟盘资金与交易效果</h2>
-      </header>
-      <MetricGrid :items="shadowMetrics" />
-      <p class="qg-section-note">
-        这里是模拟候选的后验账本：按信号后 60 分钟点数表现去重统计，给 0.01
-        手粗略等价估算；它不是实盘成交，也不会改 EA 配置。
-      </p>
-    </section>
+        <LedgerTable
+          title="Live Execution Feedback"
+          :rows="executionFeedbackRows"
+          :limit="20"
+          class="qg-ledger-table--important qg-ledger-table--mt5-full"
+        />
 
-    <div class="qg-domain-grid qg-domain-grid--account-snapshots">
-      <section class="qg-section-card">
-        <header>
-          <p class="qg-eyebrow">交易边界</p>
-          <h2>交易边界</h2>
-        </header>
-        <KeyValueList :items="safetyItems" />
-      </section>
+        <LedgerTable
+          title="RSI 入场诊断"
+          :rows="rsiEntryDiagnosticRows"
+          :limit="14"
+          class="qg-ledger-table--important qg-ledger-table--mt5-full"
+        />
 
-      <section class="qg-section-card">
-        <header>
-          <p class="qg-eyebrow">主账号快照</p>
-          <h2>主账号账户快照</h2>
-        </header>
-        <KeyValueList :items="accountItems" />
-      </section>
+        <section class="qg-section-card qg-section-card--operator qg-mt5-kline-panel">
+          <header class="qg-mt5-kline-panel__header">
+            <div>
+              <p class="qg-eyebrow">USDJPY 专业图表</p>
+              <h2>USDJPY K线与只读交易证据</h2>
+            </div>
+            <button v-if="!klineLoaded" type="button" class="qg-button" @click="enableKline">加载图表</button>
+          </header>
+          <Suspense v-if="klineLoaded">
+            <KlineWorkspace />
+            <template #fallback>
+              <LoadingState title="正在加载 K 线图" description="图表引擎和实时轮询正在按需启动。" />
+            </template>
+          </Suspense>
+          <p v-else class="qg-section-note">K 线图按需加载，避免首屏占用图表引擎内存。</p>
+        </section>
+      </div>
+    </details>
 
-      <section class="qg-section-card">
-        <header>
-          <p class="qg-eyebrow">第二账号快照</p>
-          <h2>第二账号账户快照</h2>
-        </header>
-        <KeyValueList :items="secondaryAccountItems" />
-      </section>
-    </div>
+    <details class="qg-mt5-progressive">
+      <summary>
+        <span>模拟、历史与安全证据</span>
+        <small>按需查看接口、模拟账本与历史流水</small>
+      </summary>
+      <div class="qg-mt5-progressive__content">
+        <EndpointHealthGrid :items="endpointHealth" />
 
-    <div class="qg-domain-grid qg-domain-grid--wide-tables">
-      <LedgerTable
-        title="模拟资金曲线"
-        :rows="shadowEquityRows"
-        :limit="40"
-        class="qg-ledger-table--important"
-      />
-      <LedgerTable
-        title="模拟交易记录"
-        :rows="shadowTradeRows"
-        :limit="40"
-        class="qg-ledger-table--important"
-      />
-    </div>
+        <section class="qg-section-card qg-section-card--operator">
+          <header>
+            <p class="qg-eyebrow">Shadow / ReadOnly / 模拟一眼看懂</p>
+            <h2>现在系统在做什么</h2>
+          </header>
+          <KeyValueList :items="simulationItems" />
+        </section>
 
-    <div class="qg-domain-grid qg-domain-grid--wide-tables">
-      <LedgerTable
-        title="未闭合入场线索"
-        :rows="unclosedEntryRows"
-        :limit="80"
-        class="qg-ledger-table--important"
-      />
-      <LedgerTable
-        title="双账号历史交易记录（最近）"
-        :rows="closeHistoryRows"
-        :limit="80"
-        class="qg-ledger-table--important"
-      />
-      <LedgerTable
-        title="双账号交易流水（最近）"
-        :rows="tradeJournalRows"
-        :limit="80"
-        class="qg-ledger-table--important"
-      />
-    </div>
+        <section class="qg-section-card qg-section-card--operator">
+          <header>
+            <p class="qg-eyebrow">MT5 Shadow 账本</p>
+            <h2>模拟盘资金与交易效果</h2>
+          </header>
+          <MetricGrid :items="shadowMetrics" />
+          <p class="qg-section-note">
+            这里是模拟候选的后验账本：按信号后 60 分钟点数表现去重统计，给 0.01
+            手粗略等价估算；它不是成交记录，也不会改 EA 配置。
+          </p>
+        </section>
 
-    <div class="qg-mt5-operations-grid">
-      <LedgerTable
-        title="实时持仓"
-        :rows="positionRows"
-        :limit="30"
-        class="qg-ledger-table--mt5-focus qg-ledger-table--mt5-fit"
-      />
-      <LedgerTable
-        title="挂单状态"
-        :rows="orderRows"
-        :limit="30"
-        class="qg-ledger-table--mt5-focus qg-ledger-table--mt5-fit"
-      />
-      <LedgerTable
-        title="策略运行位置"
-        :rows="routeModeRows"
-        :limit="10"
-        class="qg-ledger-table--mt5-focus"
-      />
-      <LedgerTable
-        title="近期模拟阻断原因"
-        :rows="shadowBlockerRows"
-        :limit="20"
-        class="qg-ledger-table--mt5-focus"
-      />
-      <LedgerTable
-        title="今日待办"
-        :rows="todoRows"
-        :limit="10"
-        class="qg-ledger-table--mt5-focus qg-ledger-table--mt5-full"
-      />
-      <LedgerTable
-        title="每日复盘"
-        :rows="reviewRows"
-        :limit="10"
-        class="qg-ledger-table--mt5-focus qg-ledger-table--mt5-full"
-      />
-      <LedgerTable
-        title="品种状态"
-        :rows="symbolRows"
-        :limit="40"
-        class="qg-ledger-table--mt5-focus qg-ledger-table--mt5-full"
-      />
-    </div>
+        <div class="qg-domain-grid qg-domain-grid--account-snapshots">
+          <section class="qg-section-card">
+            <header>
+              <p class="qg-eyebrow">交易边界</p>
+              <h2>交易边界</h2>
+            </header>
+            <KeyValueList :items="safetyItems" />
+          </section>
+
+          <section class="qg-section-card">
+            <header>
+              <p class="qg-eyebrow">主账号快照</p>
+              <h2>主账号账户快照</h2>
+            </header>
+            <KeyValueList :items="accountItems" />
+          </section>
+
+          <section v-if="snapshot.secondaryEnabled" class="qg-section-card">
+            <header>
+              <p class="qg-eyebrow">第二账号快照</p>
+              <h2>第二账号账户快照</h2>
+            </header>
+            <KeyValueList :items="secondaryAccountItems" />
+          </section>
+        </div>
+
+        <div class="qg-domain-grid qg-domain-grid--wide-tables">
+          <LedgerTable
+            title="模拟资金曲线"
+            :rows="shadowEquityRows"
+            :limit="10"
+            class="qg-ledger-table--important"
+          />
+          <LedgerTable
+            title="模拟交易记录"
+            :rows="shadowTradeRows"
+            :limit="10"
+            class="qg-ledger-table--important"
+          />
+        </div>
+
+        <div class="qg-domain-grid qg-domain-grid--wide-tables">
+          <LedgerTable
+            title="未闭合入场线索"
+            :rows="unclosedEntryRows"
+            :limit="10"
+            class="qg-ledger-table--important"
+          />
+          <LedgerTable
+            :title="snapshot.secondaryEnabled ? '双账号历史交易记录（最近）' : '主账号历史交易记录（最近）'"
+            :rows="closeHistoryRows"
+            :limit="10"
+            class="qg-ledger-table--important"
+          />
+          <LedgerTable
+            :title="snapshot.secondaryEnabled ? '双账号交易流水（最近）' : '主账号交易流水（最近）'"
+            :rows="tradeJournalRows"
+            :limit="10"
+            class="qg-ledger-table--important"
+          />
+        </div>
+      </div>
+    </details>
+
+    <details class="qg-mt5-progressive">
+      <summary>
+        <span>运营记录与品种状态</span>
+        <small>按需查看路线、待办、复盘与 USDJPY 状态</small>
+      </summary>
+      <div class="qg-mt5-progressive__content qg-mt5-operations-grid">
+        <LedgerTable
+          title="策略运行位置"
+          :rows="routeModeRows"
+          :limit="10"
+          class="qg-ledger-table--mt5-focus"
+        />
+        <LedgerTable
+          title="今日待办"
+          :rows="todoRows"
+          :limit="10"
+          class="qg-ledger-table--mt5-focus qg-ledger-table--mt5-full"
+        />
+        <LedgerTable
+          title="每日复盘"
+          :rows="reviewRows"
+          :limit="10"
+          class="qg-ledger-table--mt5-focus qg-ledger-table--mt5-full"
+        />
+        <LedgerTable
+          title="品种状态"
+          :rows="symbolRows"
+          :limit="10"
+          class="qg-ledger-table--mt5-focus qg-ledger-table--mt5-full"
+        />
+      </div>
+    </details>
 
     <details class="qg-raw-evidence" @toggle="revealTechnicalEvidence">
       <summary>技术证据</summary>
       <!-- Guard markers: Safety Envelope / Raw MT5 evidence. Visible copy stays Chinese and operator-facing. -->
       <div v-if="technicalEvidenceVisible" class="qg-domain-grid">
         <JsonPreview title="连接状态" source="/api/mt5-readonly/status" :payload="state.status" />
-        <JsonPreview
-          title="账号 Profiles"
-          source="/api/mt5/account-profiles"
-          :payload="state.accountProfiles"
-        />
         <JsonPreview title="账户信息" source="/api/mt5-readonly/account" :payload="state.account" />
         <JsonPreview
+          v-if="snapshot.secondaryEnabled"
           title="第二账号信息"
           source="/api/mt5-readonly-secondary/account"
           :payload="state.secondaryAccount"
@@ -308,6 +317,7 @@
         <JsonPreview title="品种登记" source="/api/mt5-symbol-registry/symbols" :payload="state.symbols" />
         <JsonPreview title="MT5 快照" source="/api/mt5-readonly/snapshot" :payload="state.snapshot" />
         <JsonPreview
+          v-if="snapshot.secondaryEnabled"
           title="第二 MT5 快照"
           source="/api/mt5-readonly-secondary/snapshot"
           :payload="state.secondarySnapshot"
@@ -332,12 +342,12 @@ import StatusPill from '../shared/StatusPill.vue';
 import {
   buildAccountItems,
   buildMt5AccountCards,
-  buildMt5AccountProfileRows,
   buildMt5ConnectionItems,
+  buildMt5CoreMetrics,
+  buildMt5PrimaryAxisItems,
   buildMt5SnapshotRecoveryRows,
   buildMt5SnapshotRootCauseBanner,
   buildEndpointHealth,
-  buildMt5Metrics,
   buildMt5ShadowBlockerRows,
   buildMt5ShadowEquityRows,
   buildMt5ShadowSummary,
@@ -360,6 +370,7 @@ import {
   buildUsdJpyLiveLoopItems,
   normalizeMt5Snapshot,
 } from './mt5Model.js';
+import { buildOperatorOverviewAxisItems, normalizeDashboardSnapshot } from '../dashboard/dashboardModel.js';
 
 const KlineWorkspace = defineAsyncComponent({
   loader: () => import('../phase1/kline/KlineWorkspace.vue'),
@@ -372,8 +383,8 @@ const error = ref('');
 const klineLoaded = ref(false);
 const technicalEvidenceVisible = ref(false);
 const state = shallowReactive({
+  operatorOverview: null,
   status: null,
-  accountProfiles: null,
   account: null,
   secondaryAccount: null,
   positions: null,
@@ -387,7 +398,6 @@ const state = shallowReactive({
   tradeJournal: [],
   secondaryTradeJournal: [],
   dailyReview: null,
-  dailyAutopilot: null,
   researchStats: null,
   governanceAdvisor: null,
   shadowSignals: null,
@@ -399,16 +409,85 @@ const state = shallowReactive({
 });
 
 const snapshot = computed(() => normalizeMt5Snapshot(state));
+const overviewSnapshot = computed(() =>
+  normalizeDashboardSnapshot({ operatorOverview: state.operatorOverview }),
+);
+const canonicalOverview = computed(() =>
+  overviewSnapshot.value.operatorOverviewState?.valid ? overviewSnapshot.value.operatorOverview : null,
+);
+const canonicalMt5 = computed(() => canonicalOverview.value?.mt5 || null);
+const activeConnections = computed(() => snapshot.value.accountConnections || []);
+const readonlyConnectionsHealthy = computed(() => {
+  if (canonicalMt5.value) {
+    return (
+      canonicalMt5.value.writerFresh === true &&
+      canonicalMt5.value.brokerConnectionKnown === true &&
+      canonicalMt5.value.brokerConnected === true &&
+      canonicalMt5.value.accountAuthorizationKnown === true &&
+      canonicalMt5.value.accountAuthorized === true &&
+      canonicalMt5.value.monitorReady === true
+    );
+  }
+  return (
+    activeConnections.value.length > 0 &&
+    activeConnections.value.every(
+      (account) => account.brokerConnected && account.accountAuthorized && account.writerFresh,
+    )
+  );
+});
+const canonicalConnectionUnknown = computed(
+  () =>
+    canonicalMt5.value &&
+    (canonicalMt5.value.brokerConnectionKnown !== true ||
+      canonicalMt5.value.accountAuthorizationKnown !== true),
+);
+const readonlyBannerStatus = computed(() =>
+  readonlyConnectionsHealthy.value
+    ? snapshot.value.marketSession === 'MARKET_CLOSED'
+      ? 'warn'
+      : 'ok'
+    : 'blocked',
+);
+const readonlyBannerLabel = computed(() => {
+  if (canonicalConnectionUnknown.value) return 'MT5 连接与授权待确认';
+  if (!readonlyConnectionsHealthy.value) return 'MT5 连接证据不完整';
+  if (snapshot.value.marketSession === 'MARKET_CLOSED') {
+    return '账号已连接 · MARKET_CLOSED';
+  }
+  return snapshot.value.secondaryEnabled ? '已启用账号只读连接正常' : '主账号已连接（只读）';
+});
+const runtimeSummaryStatus = computed(() => (readonlyConnectionsHealthy.value ? 'warn' : 'blocked'));
+const runtimeSummaryLabel = computed(() => {
+  if (canonicalConnectionUnknown.value) return 'Shadow / ReadOnly · 状态待确认';
+  if (!readonlyConnectionsHealthy.value) return 'Shadow / ReadOnly · 连接证据不完整';
+  if (snapshot.value.marketSession === 'MARKET_CLOSED') return 'MARKET_CLOSED · Shadow / ReadOnly';
+  return snapshot.value.secondaryEnabled
+    ? '双账号已连接 · Shadow / ReadOnly'
+    : '主账号已连接 · Shadow / ReadOnly';
+});
 const shadowSummary = computed(() => buildMt5ShadowSummary(snapshot.value));
 const snapshotRootCause = computed(() => buildMt5SnapshotRootCauseBanner(snapshot.value));
 const snapshotRecoveryRows = computed(() => buildMt5SnapshotRecoveryRows(snapshot.value));
-const metrics = computed(() => buildMt5Metrics(snapshot.value));
+const primaryAxisItems = computed(() => {
+  if (!canonicalOverview.value) return buildMt5PrimaryAxisItems(snapshot.value);
+  return buildOperatorOverviewAxisItems(overviewSnapshot.value).map((item) => {
+    if (item.value === '连接状态未知' || item.value === '授权状态未知') {
+      return {
+        ...item,
+        value: '待确认',
+        status: 'warn',
+        hint: '当前 writer 证据不足，不能据此断言账号掉线或失效。',
+      };
+    }
+    return item;
+  });
+});
+const coreMetrics = computed(() => buildMt5CoreMetrics(snapshot.value));
 const endpointHealth = computed(() => buildEndpointHealth(state));
 const safetyItems = computed(() => buildSafetyItems(snapshot.value));
 const simulationItems = computed(() => buildMt5SimulationItems(snapshot.value));
 const shadowMetrics = computed(() => shadowSummary.value.metrics);
 const connectionItems = computed(() => buildMt5ConnectionItems(snapshot.value));
-const accountProfileRows = computed(() => buildMt5AccountProfileRows(snapshot.value));
 const mt5AccountCards = computed(() => buildMt5AccountCards(snapshot.value));
 const accountItems = computed(() => buildAccountItems(snapshot.value));
 const secondaryAccountItems = computed(() => buildSecondaryAccountItems(snapshot.value));
@@ -462,7 +541,7 @@ async function load(options = {}) {
   } catch (exc) {
     if (controller.signal.aborted || runId !== loadRunId) return;
     if (!coreLoaded) {
-      error.value = exc?.message || 'MT5 实盘监控加载失败';
+      error.value = exc?.message || 'MT5 只读证据加载失败';
     }
   } finally {
     if (runId === loadRunId) {
@@ -495,3 +574,96 @@ onUnmounted(() => {
   abortLoad();
 });
 </script>
+
+<style scoped>
+.qg-mt5-core-status {
+  background: rgb(15 23 42 / 68%);
+  box-shadow: none;
+}
+
+.qg-mt5-core-status > header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.qg-mt5-core-operations {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.qg-mt5-progressive {
+  min-width: 0;
+  padding: 10px 18px;
+  background: rgb(15 23 42 / 52%);
+  border: 1px solid rgb(148 163 184 / 18%);
+  border-radius: 16px;
+}
+
+.qg-mt5-progressive > summary,
+.qg-raw-evidence > summary {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.qg-mt5-progressive > summary small {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.qg-mt5-progressive > summary:focus-visible,
+.qg-raw-evidence > summary:focus-visible,
+.qg-button:focus-visible {
+  outline: 3px solid rgb(56 189 248 / 72%);
+  outline-offset: 3px;
+}
+
+.qg-mt5-progressive__content {
+  display: grid;
+  gap: 16px;
+  padding-top: 14px;
+}
+
+.qg-mt5-progressive__content > .qg-section-card,
+.qg-mt5-progressive__content > .qg-mt5-dual-accounts {
+  background: rgb(15 23 42 / 62%);
+  box-shadow: none;
+}
+
+@media (width <= 1080px) {
+  .qg-mt5-core-operations {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .qg-mt5-core-operations > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (width <= 720px) {
+  .qg-mt5-core-status > header,
+  .qg-mt5-progressive > summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .qg-mt5-core-operations {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .qg-mt5-core-operations > :last-child {
+    grid-column: auto;
+  }
+}
+</style>

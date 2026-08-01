@@ -17,10 +17,9 @@ export const DOMAIN_WORKSPACES = {
   governance: 'GovernanceWorkspace.vue',
   paramlab: 'ParamLabWorkspace.vue',
   research: 'ResearchWorkspace.vue',
-  'hfm-crypto': 'HfmCryptoWorkspace.vue',
 };
 
-const ACTIVE_NAVIGATION_WORKSPACES = ['dashboard', 'mt5', 'evolution', 'hfm-crypto'];
+const ACTIVE_NAVIGATION_WORKSPACES = ['dashboard', 'mt5', 'evolution'];
 const ARCHIVED_TOOL_WORKSPACES = ['governance', 'paramlab', 'research'];
 
 function existsAsFile(filePath) {
@@ -79,15 +78,16 @@ function checkRegistry(root) {
       errors.push(`${rel(root, registryPath)}: missing ${key} import from src/workspaces/${key}`);
     }
     const hasComponentKey =
-      registry.includes(`${key}:`) ||
-      registry.includes(`'${key}':`) ||
-      registry.includes(`"${key}":`);
+      registry.includes(`${key}:`) || registry.includes(`'${key}':`) || registry.includes(`"${key}":`);
     if (!hasComponentKey) {
       errors.push(`${rel(root, registryPath)}: WORKSPACE_COMPONENTS missing ${key}`);
     }
   }
   if (registry.includes('LegacyWorkbench') || registry.includes('workspaces/legacy')) {
     errors.push(`${rel(root, registryPath)}: legacy archive must not be registered as an active workspace`);
+  }
+  if (/(?:hfm-crypto|hyperliquid|moss|\bcrypto\b|\bbtc\b)/i.test(registry)) {
+    errors.push(`${rel(root, registryPath)}: retired non-Forex workspace must not be registered`);
   }
   return errors;
 }
@@ -105,14 +105,24 @@ function checkNavigation(root) {
   }
   for (const key of ARCHIVED_TOOL_WORKSPACES) {
     if (visibleNavigation.includes(`key: '${key}'`) || visibleNavigation.includes(`key: \"${key}\"`)) {
-      errors.push(`${rel(root, navigationPath)}: archived tool workspace ${key} must not be in primary navigation`);
+      errors.push(
+        `${rel(root, navigationPath)}: archived tool workspace ${key} must not be in primary navigation`,
+      );
     }
     if (!navigation.includes(`key: '${key}'`) && !navigation.includes(`key: \"${key}\"`)) {
-      errors.push(`${rel(root, navigationPath)}: archived tool workspace ${key} must remain available as a hidden deep-link`);
+      errors.push(
+        `${rel(root, navigationPath)}: archived tool workspace ${key} must remain available as a hidden deep-link`,
+      );
     }
   }
-  if (!navigation.includes("DEFAULT_WORKSPACE = 'dashboard'") && !navigation.includes('DEFAULT_WORKSPACE = "dashboard"')) {
+  if (
+    !navigation.includes("DEFAULT_WORKSPACE = 'dashboard'") &&
+    !navigation.includes('DEFAULT_WORKSPACE = "dashboard"')
+  ) {
     errors.push(`${rel(root, navigationPath)}: DEFAULT_WORKSPACE should be dashboard after domain split`);
+  }
+  if (/(?:hfm-crypto|hyperliquid|moss|\bcrypto\b|\bbtc\b)/i.test(navigation)) {
+    errors.push(`${rel(root, navigationPath)}: retired non-Forex workspace must not be visible`);
   }
   return errors;
 }
@@ -128,7 +138,6 @@ function checkDomainApi(root) {
     'loadGovernanceWorkspace',
     'loadParamLabWorkspace',
     'loadResearchWorkspace',
-    'loadHfmCryptoWorkspace',
   ]) {
     if (!service.includes(`function ${name}`)) {
       errors.push(`${rel(root, servicePath)}: missing ${name}`);
@@ -138,20 +147,8 @@ function checkDomainApi(root) {
   for (const match of forbiddenLocalRuntimeReads) {
     errors.push(`${rel(root, servicePath)}: forbidden local runtime file read ${match}; use /api/*`);
   }
-  const dashboardStart = service.indexOf('function loadDashboardWorkspace');
-  const mt5Start = service.indexOf('function loadMt5Workspace');
-  if (dashboardStart >= 0 && mt5Start > dashboardStart) {
-    const dashboardBody = service.slice(dashboardStart, mt5Start);
-    const usesCompactHfmCrypto =
-      dashboardBody.includes('/api/hfm-crypto/status?view=summary') ||
-      (dashboardBody.includes('scopedHfmCryptoPath') &&
-        dashboardBody.includes('/api/hfm-crypto/status') &&
-        dashboardBody.includes("view: 'summary'"));
-    if (dashboardBody.includes('/api/hfm-crypto/status') && !usesCompactHfmCrypto) {
-      errors.push(
-        `${rel(root, servicePath)}: dashboard HFM crypto load must use compact /api/hfm-crypto/status?view=summary`,
-      );
-    }
+  if (/(?:hyperliquid|moss|\bcrypto\b|\bbtc\b)/i.test(service)) {
+    errors.push(`${rel(root, servicePath)}: retired non-Forex lane must not be referenced`);
   }
   return errors;
 }

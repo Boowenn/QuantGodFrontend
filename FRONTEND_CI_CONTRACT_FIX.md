@@ -11,7 +11,7 @@
   - `npm run contract`
   - `npm test`
 - 清理 `src/services/api.js` 中的 daily review / daily autopilot 直接 JSON fallback。
-- 继续检查前端仓库拆分边界：不允许出现 `Dashboard/`、`MQL5/`、`tools/`、`cloudflare/`。
+- 继续检查前端仓库拆分边界：不允许出现 `Dashboard/`、`MQL5/`、`tools/`。
 
 ## 本地验证
 

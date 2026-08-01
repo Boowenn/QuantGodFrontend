@@ -23,8 +23,8 @@ const service = fs.existsSync(path.join(repoRoot, 'src/services/usdjpyStrategyLa
   ? fs.readFileSync(path.join(repoRoot, 'src/services/usdjpyStrategyLabApi.js'), 'utf8')
   : '';
 if (!service.includes('/api/usdjpy-strategy-lab')) errors.push('service must use /api/usdjpy-strategy-lab');
-if (!service.includes('fetchJson') || !service.includes('postJson'))
-  errors.push('service must use existing fetchJson/postJson helpers');
+if (!service.includes('fetchJson') || !service.includes('postCommandJson'))
+  errors.push('service must use fetchJson for queries and postCommandJson for commands');
 for (const marker of [
   '/catalog',
   '/signals',

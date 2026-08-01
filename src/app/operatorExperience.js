@@ -6,8 +6,7 @@ const LOCALE_KEY = 'quantgod.ui.locale';
 const WORKSPACES = [
   { key: 'dashboard', hotkey: 'd', zh: '总览', en: 'Dashboard' },
   { key: 'mt5', hotkey: 'm', zh: 'MT5 复核', en: 'MT5 Monitor' },
-  { key: 'evolution', hotkey: 'e', zh: '自学习', en: 'Evolution' },
-  { key: 'hfm-crypto', hotkey: 'c', zh: 'HFM Crypto', en: 'HFM Crypto' },
+  { key: 'evolution', hotkey: 'e', zh: '策略进化', en: 'Evolution' },
 ];
 
 function safeSet(key, value) {

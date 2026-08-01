@@ -53,7 +53,6 @@ const STATUS_LABELS = new Map([
   ['FILE_ONLY_RUN_HISTORY', '只读取运行历史'],
   ['FILE_ONLY_REPORT_WATCHER', '只读取报告监听'],
   ['KEEP_DRY_RUN_UNTIL_POLICY_PASS', '保持只读研究，等待策略通过'],
-  ['AI_SCORE_ONLY_NO_BETTING', '只做 AI 评分，不自动下注'],
   ['WAIT_BAR', '等待下一根K线'],
   ['ROUTE_DISABLED', '路线已关闭'],
   ['FULL', '可交易'],
@@ -61,7 +60,6 @@ const STATUS_LABELS = new Map([
   ['SIMULATION_CANDIDATE', '模拟候选'],
   ['MACD_MOMENTUM_TURN', 'MACD 动量转折'],
   ['RULE_PROXY_NO_LLM', '规则代理评分，未调用模型'],
-  ['READ_ONLY_MARKET_CATALOG_NO_WALLET_WRITE', '只读市场目录，不写钱包'],
   ['SOURCE_EMPTY', '来源为空'],
   ['PARSED_AGENT_ARTIFACTS', '报告已解析'],
   ['PENDING_REPORT', '等待报告回灌'],
@@ -74,9 +72,6 @@ const STATUS_LABELS = new Map([
   ['SCHEDULED_FOR_TESTER_WINDOW', '已安排测试窗口'],
   ['COMPLETE_NO_ACTION', '复盘完成，暂无新增动作'],
   ['REVIEW_COMPLETE_NO_CODE_CHANGE', '复盘完成，暂无代码迭代'],
-  ['COPY_TRADING_RETUNE_REQUIRED', '跟单策略需要重调'],
-  ['COPY_TRADING_SHADOW_WATCH', '跟单模拟观察'],
-  ['NO_COPY_TRADING_SHADOW_EVIDENCE', '暂无跟单模拟样本'],
   ['RETUNE_SPEC_READY_SHADOW_ONLY', '已生成模拟重调方案'],
   ['APPLIED_SHADOW_ONLY', '已进入模拟重调'],
   ['CONFIG_ONLY_WAIT_REPORT_RETUNE', '已生成配置，等待报告回灌'],
@@ -153,7 +148,6 @@ const KEY_LABELS = new Map([
   ['liquidity', '流动性'],
   ['volume', '成交量'],
   ['amount', '金额'],
-  ['stake', '下注金额'],
   ['profit', '盈亏'],
   ['pnl', '盈亏'],
   ['netPnl', '净盈亏'],
@@ -164,7 +158,6 @@ const KEY_LABELS = new Map([
   ['trades', '交易数'],
   ['rows', '记录'],
   ['items', '项目'],
-  ['walletBalanceUSDC', '钱包余额'],
   ['timeframe', '周期'],
   ['live', '实盘状态'],
   ['mode', '模式'],
@@ -194,7 +187,6 @@ export function humanizeStatus(value, fallback = EMPTY) {
   if (STATUS_LABELS.has(lower)) return STATUS_LABELS.get(lower);
   if (tokenLike) {
     if (lower.includes('keep_dry_run')) return '保持只读研究，等待策略通过';
-    if (lower.includes('ai_score_only')) return '只做 AI 评分，不自动下注';
     if (lower.includes('config_only')) return '仅配置自动化';
     if (lower.includes('file_only')) return '只读本地记录';
     if (lower.includes('auto_paused')) return '自动暂停阻断';

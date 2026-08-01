@@ -38,17 +38,24 @@ function checkMt5Workspace(root) {
     './mt5Model.js',
     'loadMt5WorkspaceCore',
     'loadMt5Workspace',
+    'normalizeDashboardSnapshot',
+    'buildOperatorOverviewAxisItems',
     'EndpointHealthGrid',
     'KeyValueList',
     'LedgerTable',
-    '账号连接矩阵',
-    'MT5 账号 Profiles',
+    '模式与市场',
+    'primaryAxisItems',
+    'coreMetrics',
+    'qg-mt5-progressive',
+    '账户登记与快照诊断',
+    '当前账号与凭据边界',
+    ':limit="3"',
     '第二账号信息',
     'RSI 入场诊断',
     '执行反馈与下一代修复',
     'StatusPill',
     '全局快照恢复',
-    'MT5 快照恢复矩阵',
+    '当前账号数据是否可信',
     'snapshotRootCause',
     'snapshotRecoveryRows',
     'Safety Envelope',
@@ -86,6 +93,8 @@ function checkMt5Model(root) {
   for (const exportedName of [
     'normalizeMt5Snapshot',
     'buildMt5Metrics',
+    'buildMt5CoreMetrics',
+    'buildMt5PrimaryAxisItems',
     'buildSafetyItems',
     'buildAccountItems',
     'buildMt5ConnectionItems',
@@ -164,8 +173,8 @@ function checkDomainApi(root) {
   if (!text.includes('loadMt5WorkspaceCore')) {
     errors.push(`${rel(root, api)}: MT5 workspace must expose a core snapshot load for first paint`);
   }
-  if (!text.includes('/api/mt5/account-profiles')) {
-    errors.push(`${rel(root, api)}: MT5 workspace must load account profile registry through API facade`);
+  if (text.includes('/api/mt5/account-profiles') || text.includes('/api/mt5-trading')) {
+    errors.push(`${rel(root, api)}: MT5 workspace must not call retired trading or account-profile routes`);
   }
   for (const endpoint of [
     '/api/mt5-readonly/positions',

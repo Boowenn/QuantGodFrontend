@@ -18,6 +18,8 @@ function makeProject(files) {
 const model = [
   'export function normalizeMt5Snapshot() {}',
   'export function buildMt5Metrics() {}',
+  'export function buildMt5CoreMetrics() {}',
+  'export function buildMt5PrimaryAxisItems() {}',
   'export function buildSafetyItems() {}',
   'export function buildAccountItems() {}',
   'export function buildMt5ConnectionItems() {}',
@@ -45,10 +47,11 @@ const model = [
 ].join('\n');
 
 const workspace = [
-  '<template><EndpointHealthGrid /><KeyValueList /><LedgerTable title="账号连接矩阵" /><LedgerTable title="MT5 账号 Profiles" /><LedgerTable title="第二账号信息" /><LedgerTable title="RSI 入场诊断" /><LedgerTable title="MT5 快照恢复矩阵" :rows="snapshotRecoveryRows" /><StatusPill />全局快照恢复 {{ snapshotRootCause }} 执行反馈与下一代修复 Safety Envelope Raw MT5 evidence</template>',
+  '<template><EndpointHealthGrid /><KeyValueList :items="primaryAxisItems" /><MetricGrid :items="coreMetrics" /><details class="qg-mt5-progressive">账户登记与快照诊断</details><section>当前账号与凭据边界</section><LedgerTable title="第二账号信息" /><LedgerTable title="RSI 入场诊断" :limit="3" /><LedgerTable title="当前账号数据是否可信" :rows="snapshotRecoveryRows" /><StatusPill />模式与市场 全局快照恢复 {{ snapshotRootCause }} 执行反馈与下一代修复 Safety Envelope Raw MT5 evidence</template>',
   '<script setup>',
   "import { loadMt5Workspace, loadMt5WorkspaceCore } from '../../services/domainApi.js';",
   "import { normalizeMt5Snapshot } from './mt5Model.js';",
+  "import { normalizeDashboardSnapshot, buildOperatorOverviewAxisItems } from '../dashboard/dashboardModel.js';",
   '</script>',
 ].join('\n');
 
@@ -60,12 +63,12 @@ const validFiles = {
   'src/workspaces/mt5/Mt5Workspace.vue': workspace,
   'src/services/domainApi.js': `
 export async function loadMt5WorkspaceCore() {
+  fetchJson('/api/operator/overview');
   fetchJson('/api/mt5-readonly/snapshot');
   fetchJson('/api/mt5-readonly-secondary/snapshot');
 }
 export async function loadMt5Workspace() {
   const focusSymbol = 'USDJPYc';
-  fetchJson('/api/mt5/account-profiles');
   fetchJson('/api/mt5-readonly-secondary/account');
   fetchJson(\`/api/shadow/signals\${params({ symbol: focusSymbol, limit: 500, days: 30 })}\`);
   fetchJson(\`/api/shadow/outcomes\${params({ symbol: focusSymbol, limit: 500, days: 30 })}\`);
@@ -92,6 +95,7 @@ test('keeps MT5 snapshot root cause in a core first-paint load', () => {
   const coreStart = service.indexOf('export async function loadMt5WorkspaceCore(options = {})');
   const fullStart = service.indexOf('export async function loadMt5Workspace(options = {})');
   const coreLoadBody = service.slice(coreStart, fullStart);
+  assert.match(coreLoadBody, /\/api\/operator\/overview/);
   assert.match(coreLoadBody, /\/api\/mt5-readonly\/snapshot/);
   assert.match(coreLoadBody, /\/api\/mt5-readonly-secondary\/snapshot/);
   assert.match(coreLoadBody, /\/api\/latest/);

@@ -1,11 +1,11 @@
-import { fetchJson, postJson } from './apiClient.js';
+import { fetchJson, postCommandJson } from './apiClient.js';
 
 export function fetchProductionEvidenceStatus(options = {}) {
   return fetchJson('/api/production-evidence-validation/status', null, options);
 }
 
 export function runProductionEvidenceValidation() {
-  return postJson('/api/production-evidence-validation/run', {});
+  return postCommandJson('/api/production-evidence-validation/run', {});
 }
 
 export function fetchProductionEvidenceTelegramText(refresh = false) {

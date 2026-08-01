@@ -38,7 +38,7 @@ for (const marker of [
   'buildCaseMemoryCandidates',
   'fetchCaseMemoryTelegramText',
   'fetchJson',
-  'postJson',
+  'postCommandJson',
 ]) {
   if (!service.includes(marker)) errors.push(`case memory service missing ${marker}`);
 }

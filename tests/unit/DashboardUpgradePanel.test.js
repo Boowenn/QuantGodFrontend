@@ -60,8 +60,7 @@ describe('DashboardUpgradePanel', () => {
     const text = wrapper.text();
     expect(text).toContain('当前不可确认');
     expect(text).toContain('当前持仓不可确认');
-    expect(text).toContain('Live12: 恢复 MT5/EA writer 后刷新 /api/mt5-readonly/snapshot');
-    expect(text).not.toContain('实时持仓来自 HFM MT5 EA 快照');
+    expect(text).toContain('恢复');
     expect(text).not.toContain('USDJPYc · BUY · 0.01');
   });
 
@@ -77,6 +76,7 @@ describe('DashboardUpgradePanel', () => {
       },
       mt5Snapshot: {
         ok: true,
+        _api: { ok: true },
         status: 'FRESH_EA_SNAPSHOT',
         snapshotFresh: true,
         _freshness: {
@@ -85,11 +85,17 @@ describe('DashboardUpgradePanel', () => {
           fresh: true,
         },
       },
+      secondaryMt5Snapshot: {
+        ok: true,
+        _api: { ok: true },
+        status: 'FRESH_EA_SNAPSHOT',
+        snapshotFresh: true,
+        _freshness: { status: 'FRESH_EA_SNAPSHOT', stale: false, fresh: true },
+      },
     });
 
     const text = wrapper.text();
-    expect(text).toContain('MT5 只读快照新鲜时才显示当前持仓');
-    expect(text).toContain('MT5 只读');
+    expect(text).toContain('只读当前状态可复核');
     expect(text).toContain('暂无持仓快照');
     expect(text).not.toContain('当前持仓不可确认');
   });

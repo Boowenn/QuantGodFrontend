@@ -90,6 +90,20 @@ test('one-click cycle calls read-only backtest, AI monitor, and Telegram push en
   assert.equal(result.notify._api.method, 'POST');
 });
 
+test('one-click cycle stops immediately when any command omits explicit ok=true', async () => {
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (String(url).startsWith('/api/mt5-backtest-loop/run')) {
+      return jsonResponse({ status: 'COMPLETED', rows: [] });
+    }
+    return jsonResponse({ ok: true });
+  };
+
+  await assert.rejects(runBacktestAiCycle({ sendTelegram: true }), /did not confirm ok=true/);
+  assert.deepEqual(calls, ['/api/mt5-backtest-loop/run?days=180&maxTasks=20']);
+});
+
 test('Telegram digest keeps the safety boundary visible', () => {
   const message = buildBacktestTelegramMessage({
     symbols: ['EURUSDc'],

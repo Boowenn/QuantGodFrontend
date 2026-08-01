@@ -80,9 +80,6 @@ jobs:
       - name: Research workspace guard
         run: npm run research-workspace
 
-      - name: HFM Crypto workspace guard
-        run: npm run hfm-crypto-workspace
-
       - name: Legacy deprecation guard
         run: npm run legacy-deprecation
 
@@ -109,4 +106,3 @@ jobs:
           test ! -d Dashboard
           test ! -d MQL5
           test ! -d tools
-          test ! -d cloudflare

@@ -42,7 +42,16 @@ function apiFailed(source = {}) {
   return source.ok === false || source.endpointLoadFailed === true || api.ok === false;
 }
 
+function optionalLaneDisabled(source = {}, freshness = {}) {
+  return (
+    statusOf(source.status || freshness.status) === 'DISABLED' &&
+    (source.optional === true || freshness.optional === true) &&
+    (source.enabled === false || freshness.enabled === false)
+  );
+}
+
 function terminalMissing(source = {}) {
+  if (optionalLaneDisabled(source, source._freshness || {})) return false;
   const terminal = isObject(source.terminal) ? source.terminal : {};
   const process = isObject(source.hostProcess) ? source.hostProcess : {};
   return (
@@ -54,6 +63,7 @@ function terminalMissing(source = {}) {
 }
 
 function freshnessTerminalMissing(source = {}, freshness = {}) {
+  if (optionalLaneDisabled(source, freshness)) return false;
   const blockers = Array.isArray(freshness.blockers) ? freshness.blockers : [];
   return (
     terminalMissing(source) ||
@@ -62,6 +72,34 @@ function freshnessTerminalMissing(source = {}, freshness = {}) {
     statusOf(freshness.hostProcessStatus) === 'MISSING' ||
     blockers.includes('mt5_terminal_process_missing')
   );
+}
+
+function normalizeDisabledFreshness(freshness = {}) {
+  return {
+    ...freshness,
+    mode: freshness.mode || 'MT5_OPTIONAL_SECONDARY_LANE',
+    status: 'DISABLED',
+    statusLabel: freshness.statusLabel || 'Optional secondary MT5 lane disabled',
+    statusZh: freshness.statusZh || '可选第二 MT5 账号未启用',
+    fresh: true,
+    stale: false,
+    unavailable: false,
+    missing: false,
+    unconfirmed: false,
+    optional: true,
+    enabled: false,
+    terminalProcessMissing: false,
+    sourceFile: '',
+    mtimeIso: '',
+    blockers: [],
+    nextActionZh:
+      freshness.nextActionZh || '第二账号为可选车道；账号重新有效并完成只读 EA 配置后，再显式启用。',
+    recoveryStepsZh: [],
+    orderSendAllowed: false,
+    mt5OrderSendAllowed: false,
+    brokerCallsMade: false,
+    mutatesMt5: false,
+  };
 }
 
 function recoveryStepsZh(refreshEndpoint = '') {
@@ -221,6 +259,10 @@ function normalizeFreshnessEnvelope(source = {}, freshness = {}, options = {}) {
 export function normalizeMt5ReadonlyFreshness(payload = {}, options = {}) {
   const source = unwrapPayload(payload) || {};
   if (!isObject(source)) return {};
+  const embeddedFreshness = isObject(source._freshness) ? source._freshness : {};
+  if (optionalLaneDisabled(source, embeddedFreshness)) {
+    return normalizeDisabledFreshness(embeddedFreshness);
+  }
   if (isObject(source._freshness) && present(source._freshness)) {
     return normalizeFreshnessEnvelope(source, source._freshness, options);
   }

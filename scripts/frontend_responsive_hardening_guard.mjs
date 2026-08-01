@@ -76,7 +76,7 @@ for (const pattern of forbidden) {
   assert(!pattern.test(css), `responsive-hardening.css contains forbidden pattern: ${pattern}`);
 }
 
-for (const route of ['dashboard', 'mt5', 'evolution', 'hfm-crypto']) {
+for (const route of ['dashboard', 'mt5', 'evolution']) {
   assert(
     responsiveCheck.includes(`name: '${route}'`),
     `responsive_check.mjs must continue covering ${route}`,

@@ -10,7 +10,7 @@ const files = [
   'src/workspaces/dashboard/DashboardWorkspace.vue',
 ];
 const forbidden =
-  /\/QuantGod_.*\.(json|csv)|OrderSend|quick-trade|telegramCommandExecutionAllowed\s*[:=]\s*true|fetch\s*\(/i;
+  /\/QuantGod_.*\.(json|csv)|OrderSend|quick-trade|telegramCommandExecutionAllowed\s*[:=]\s*true|fetch\s*\(|hyperliquid|moss|\bcrypto\b|\bbtc\b/i;
 
 function read(rel) {
   const full = path.join(repoRoot, rel);
@@ -51,7 +51,6 @@ for (const marker of [
   '/autonomous-agent/lifecycle',
   '/autonomous-agent/lanes',
   '/autonomous-agent/mt5-shadow',
-  '/api/hfm-crypto/status?view=summary&scope=secondary',
   '/autonomous-agent/ea-repro',
   '/autonomous-agent/daily-autopilot-v2',
   '/autonomous-agent/daily-autopilot-v2/run',
@@ -93,13 +92,13 @@ for (const marker of [
 ]) {
   if (!service.includes(marker)) errors.push(`service missing ${marker}`);
 }
-if (!service.includes('fetchJson') || !service.includes('postJson')) {
-  errors.push('service must use existing fetchJson/postJson helpers');
+if (!service.includes('fetchJson') || !service.includes('postCommandJson')) {
+  errors.push('service must use fetchJson for queries and postCommandJson for commands');
 }
 
 const panel = read('src/components/USDJPYEvolutionPanel.vue');
 for (const marker of [
-  'USDJPY 自学习闭环',
+  'USDJPY Shadow / ReadOnly 研究闭环',
   '数据集',
   '回放',
   '参数候选',
@@ -111,13 +110,12 @@ for (const marker of [
   '因果 bar/tick 回放',
   '未来后验只评分，不触发',
   '前向验证稳定性筛选',
-  '无需人工审批',
-  '机器硬风控',
+  '本页不生成执行授权',
+  '硬风控失败时保持阻断',
   '自动回滚',
-  '三车道自主生命周期',
+  '三车道 Shadow / ReadOnly 生命周期',
   '美分账户',
   'MT5 模拟车道',
-  'HFM Crypto 模拟车道',
   '自动日报 2.0',
   '今日待办',
   '每日复盘',
@@ -295,8 +293,9 @@ const dashboard = read('src/workspaces/dashboard/DashboardWorkspace.vue');
 if (dashboard.includes('<USDJPYEvolutionPanel') || dashboard.includes('<USDJPYStrategyPolicyPanel')) {
   errors.push('Dashboard must not mount heavy USDJPY strategy/evolution panels directly');
 }
-for (const marker of ['按需打开重证据页面', 'workspace=evolution', 'workspace=mt5', 'workspace=hfm-crypto']) {
-  if (!dashboard.includes(marker)) errors.push(`Dashboard missing lightweight workspace link marker: ${marker}`);
+for (const marker of ['按需打开重证据页面', 'workspace=evolution', 'workspace=mt5']) {
+  if (!dashboard.includes(marker))
+    errors.push(`Dashboard missing lightweight workspace link marker: ${marker}`);
 }
 
 const automationPanel = read('src/components/AutomationChainPanel.vue');

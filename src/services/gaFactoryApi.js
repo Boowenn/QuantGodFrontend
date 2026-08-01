@@ -1,4 +1,4 @@
-import { fetchJson, postJson } from './apiClient.js';
+import { fetchJson, postCommandJson } from './apiClient.js';
 
 const BASE = '/api/ga-factory';
 
@@ -7,7 +7,7 @@ export function fetchGAFactoryStatus() {
 }
 
 export function buildGAFactory() {
-  return postJson(`${BASE}/build`, { focusSymbol: 'USDJPYc' });
+  return postCommandJson(`${BASE}/build`, { focusSymbol: 'USDJPYc' });
 }
 
 export function fetchGAFactoryTelegramText({ refresh = false } = {}) {

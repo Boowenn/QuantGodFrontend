@@ -1,4 +1,4 @@
-import { fetchJson, fetchRows as fetchRowsJson, postJson } from './apiClient.js';
+import { fetchJson, fetchRows as fetchRowsJson, postCommandJson } from './apiClient.js';
 
 async function loadLegacyDashboardEntries(entries) {
   const results = {};
@@ -38,8 +38,6 @@ export async function loadDashboardState(query = '') {
     dailyAutopilot,
     mt5ResearchStats,
     strategyRegistry,
-    hfmCrypto,
-    profitTarget,
     shadowSignalRows,
     shadowOutcomeRows,
     shadowCandidateRows,
@@ -73,8 +71,6 @@ export async function loadDashboardState(query = '') {
     ['dailyAutopilot', () => fetchJson('/api/daily-autopilot')],
     ['mt5ResearchStats', () => fetchJson('/api/research/stats')],
     ['strategyRegistry', () => fetchJson('/api/governance/version-registry')],
-    ['hfmCrypto', () => fetchJson('/api/hfm-crypto/status?view=summary&scope=secondary')],
-    ['profitTarget', () => fetchJson('/api/profit-target/status?scope=secondary')],
     ['shadowSignalRows', () => fetchRowsJson('/api/shadow/signals?limit=500')],
     ['shadowOutcomeRows', () => fetchRowsJson('/api/shadow/outcomes?limit=500')],
     ['shadowCandidateRows', () => fetchRowsJson('/api/shadow/candidates?limit=500')],
@@ -130,28 +126,17 @@ export async function loadDashboardState(query = '') {
         manualAlpha: manualAlphaRows,
       },
     },
-    hfmCrypto,
-    profitTarget,
   };
 }
 
 export async function evaluateAutoTesterWindow(payload = {}) {
-  return postJson('/api/paramlab/auto-tester/evaluate', payload, {
-    ok: false,
-    error: 'auto_tester_evaluate_failed',
-  });
+  return postCommandJson('/api/paramlab/auto-tester/evaluate', payload);
 }
 
 export async function createAutoTesterLock(payload = {}) {
-  return postJson('/api/paramlab/auto-tester/lock', payload, {
-    ok: false,
-    error: 'auto_tester_lock_failed',
-  });
+  return postCommandJson('/api/paramlab/auto-tester/lock', payload);
 }
 
 export async function startAutoTesterWindow(payload = {}) {
-  return postJson('/api/paramlab/auto-tester/run', payload, {
-    ok: false,
-    error: 'auto_tester_run_failed',
-  });
+  return postCommandJson('/api/paramlab/auto-tester/run', payload);
 }

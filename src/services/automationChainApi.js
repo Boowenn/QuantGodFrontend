@@ -1,4 +1,4 @@
-import { fetchJson, postJson } from './apiClient.js';
+import { fetchJson, postCommandJson } from './apiClient.js';
 
 const USDJPY_SCOPE = 'symbols=USDJPYc';
 
@@ -8,7 +8,7 @@ export function fetchAutomationChainStatus() {
 
 export function runAutomationChain({ send = false } = {}) {
   const query = send ? `?${USDJPY_SCOPE}&send=1` : `?${USDJPY_SCOPE}`;
-  return postJson(`/api/automation-chain/run${query}`, {});
+  return postCommandJson(`/api/automation-chain/run${query}`, {});
 }
 
 export function fetchAutomationChainTelegramText({ refresh = false } = {}) {

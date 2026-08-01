@@ -59,10 +59,10 @@ textarea,
 .research-workspace,
 .paramlab-workspace,
 .governance-workspace,
-.hfm-crypto-workspace,
 .phase3-workspace,
 .backtest-ai-workspace {
   min-width: 0;
+  width: 100%;
   max-width: 100%;
 }
 

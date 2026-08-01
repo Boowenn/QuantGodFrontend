@@ -1,6 +1,7 @@
 const VITE_ENV = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {};
 
 export const DEFAULT_TIMEOUT_MS = Number(VITE_ENV.VITE_QG_API_TIMEOUT_MS || 15000);
+export const DEFAULT_COMMAND_TIMEOUT_MS = Number(VITE_ENV.VITE_QG_COMMAND_TIMEOUT_MS || 300000);
 export const API_BASE_URL = normalizeBaseUrl(VITE_ENV.VITE_QG_API_BASE_URL || '');
 
 const JSON_HEADERS = { Accept: 'application/json' };
@@ -9,7 +10,7 @@ const RUNTIME_FILE_PATTERN = /\/QuantGod_[^\s'"?#]+\.(json|csv)\b/i;
 
 function normalizeBaseUrl(value) {
   const text = String(value || '').trim();
-  return text.endsWith('/') ? text.slice(0, -1) : text;
+  return text.replace(/\/+$/, '');
 }
 
 function nowMs() {
@@ -69,11 +70,21 @@ function requestAbortController(externalSignal, timeoutMs) {
   };
 }
 
-async function parseJsonSafe(response) {
+async function parseJsonResponse(response) {
+  const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
+  const text = await response.text();
+  const trimmed = text.trim();
+
+  if (!trimmed) {
+    return { ok: false, data: null, error: 'Empty response body; expected JSON' };
+  }
+  if (contentType.includes('text/html') || /^\s*<!doctype\s+html|^\s*<html[\s>]/i.test(trimmed)) {
+    return { ok: false, data: null, error: 'HTML response received; expected JSON' };
+  }
   try {
-    return await response.json();
+    return { ok: true, data: JSON.parse(trimmed), error: '' };
   } catch (_) {
-    return null;
+    return { ok: false, data: null, error: 'Malformed JSON response' };
   }
 }
 
@@ -94,9 +105,18 @@ export function assertApiPath(path) {
   return endpoint;
 }
 
-export function makeApiUrl(path) {
+export function joinApiBaseUrl(baseUrl, path) {
   const endpoint = assertApiPath(path);
-  return `${API_BASE_URL}${endpoint}`;
+  const base = normalizeBaseUrl(baseUrl);
+  if (!base) return endpoint;
+  if (base.endsWith('/api') && endpoint.startsWith('/api/')) {
+    return `${base}${endpoint.slice('/api'.length)}`;
+  }
+  return `${base}${endpoint}`;
+}
+
+export function makeApiUrl(path) {
+  return joinApiBaseUrl(API_BASE_URL, path);
 }
 
 export function queryString(query = {}) {
@@ -180,14 +200,20 @@ export async function fetchApiJson(path, options = {}) {
       cache: 'no-store',
       signal: requestAbort.signal,
     });
-    const data = await parseJsonSafe(response);
+    const parsed = await parseJsonResponse(response);
+    const ok = response.ok && parsed.ok;
     return {
-      ok: response.ok,
+      ok,
       endpoint,
       method: 'GET',
       status: response.status,
-      data: response.ok ? data : null,
-      error: response.ok ? null : { message: `HTTP ${response.status}`, body: data },
+      data: ok ? parsed.data : null,
+      error: ok
+        ? null
+        : {
+            message: response.ok ? parsed.error : `HTTP ${response.status}`,
+            body: parsed.ok ? parsed.data : null,
+          },
       fetchedAt: new Date().toISOString(),
       durationMs: safeDuration(startedAtMs),
     };
@@ -227,14 +253,20 @@ export async function postApiJson(path, payload = {}, options = {}) {
       body: JSON.stringify(payload || {}),
       signal: requestAbort.signal,
     });
-    const data = await parseJsonSafe(response);
+    const parsed = await parseJsonResponse(response);
+    const ok = response.ok && parsed.ok;
     return {
-      ok: response.ok,
+      ok,
       endpoint,
       method: 'POST',
       status: response.status,
-      data: response.ok ? data : null,
-      error: response.ok ? null : { message: `HTTP ${response.status}`, body: data },
+      data: ok ? parsed.data : null,
+      error: ok
+        ? null
+        : {
+            message: response.ok ? parsed.error : `HTTP ${response.status}`,
+            body: parsed.ok ? parsed.data : null,
+          },
       fetchedAt: new Date().toISOString(),
       durationMs: safeDuration(startedAtMs),
     };
@@ -262,6 +294,49 @@ export async function fetchJson(path, fallback = null, options = {}) {
 export async function postJson(path, payload = {}, fallback = null, options = {}) {
   const result = await postApiJson(path, payload, options);
   return apiFallback(result, fallback, path);
+}
+
+function commandPayloadError(result, endpoint) {
+  if (!result?.ok) return apiThrowMessage(result, endpoint);
+  if (!isPlainObject(result.data)) {
+    return `Command ${endpoint} did not return a JSON object with ok=true`;
+  }
+  if (result.data.ok === true) return '';
+  return (
+    result.data.statusZh ||
+    result.data.error ||
+    result.data.message ||
+    `Command ${endpoint} did not confirm ok=true`
+  );
+}
+
+function commandResultOrThrow(result, endpoint) {
+  const message = commandPayloadError(result, endpoint);
+  if (message) {
+    const error = new Error(message);
+    error.name = 'QuantGodCommandError';
+    error.endpoint = endpoint;
+    error.status = Number(result?.status || 0);
+    error.body = result?.data || result?.error?.body || null;
+    throw error;
+  }
+  return attachApiMeta(result.data, result, endpoint);
+}
+
+export async function fetchCommandJson(path, options = {}) {
+  const result = await fetchApiJson(path, {
+    timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+    ...options,
+  });
+  return commandResultOrThrow(result, path);
+}
+
+export async function postCommandJson(path, payload = {}, options = {}) {
+  const result = await postApiJson(path, payload, {
+    timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+    ...options,
+  });
+  return commandResultOrThrow(result, path);
 }
 
 export async function fetchRows(path, options = {}) {

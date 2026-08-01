@@ -38,7 +38,6 @@ export function runCodeSplittingGuard(root = process.cwd()) {
     'GovernanceWorkspace',
     'ParamLabWorkspace',
     'ResearchWorkspace',
-    'HfmCryptoWorkspace',
     'BacktestAiWorkspace',
     'LegacyWorkbench',
     'Phase1Workspace',
@@ -107,8 +106,15 @@ export function runCodeSplittingGuard(root = process.cwd()) {
   );
 
   failIf(errors, !vite.includes('manualChunks'), 'vite.config.js must define manualChunks');
-  for (const chunk of ['monaco-editor', 'klinecharts', 'workspace-phase3', 'workspace-kline']) {
+  for (const chunk of ['monaco-editor', 'klinecharts']) {
     failIf(errors, !vite.includes(chunk), `vite.config.js missing ${chunk} chunk rule`);
+  }
+  for (const chunk of ['workspace-phase3', 'workspace-kline']) {
+    failIf(
+      errors,
+      vite.includes(chunk),
+      `vite.config.js must not force ${chunk}; the shared K-line graph produced a startup cycle`,
+    );
   }
 
   return errors;

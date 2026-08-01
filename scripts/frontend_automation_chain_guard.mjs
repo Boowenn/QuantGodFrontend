@@ -25,10 +25,7 @@ function finish() {
   process.exit(1);
 }
 
-const required = [
-  'src/services/automationChainApi.js',
-  'src/components/AutomationChainPanel.vue',
-];
+const required = ['src/services/automationChainApi.js', 'src/components/AutomationChainPanel.vue'];
 
 for (const rel of required) {
   assert(existsSync(join(root, rel)), `missing required automation chain frontend file: ${rel}`);
@@ -41,15 +38,28 @@ const panel = readFileSync(join(root, 'src/components/AutomationChainPanel.vue')
 
 assert(service.includes('/api/automation-chain'), 'automationChainApi must call /api/automation-chain only');
 assert(service.includes('symbols=USDJPYc'), 'automationChainApi must scope every request to USDJPYc');
-assert(!/USDJPYc,EURUSDc,XAUUSDc/.test(service + panel), 'automation chain frontend must not default to multi-symbol scope');
-assert(!/QuantGod_.*\.(json|csv)/i.test(service + panel), 'frontend automation chain must not read QuantGod runtime files directly');
-assert(!/OrderSend|quick-trade|telegram command|privateKey|password|apiKey/i.test(service + panel), 'frontend automation chain contains forbidden execution/secret wording');
 assert(
-  panel.includes('USDJPY 实盘 EA 恢复状态') &&
+  service.includes('postCommandJson'),
+  'automationChainApi commands must fail closed through postCommandJson',
+);
+assert(
+  !/USDJPYc,EURUSDc,XAUUSDc/.test(service + panel),
+  'automation chain frontend must not default to multi-symbol scope',
+);
+assert(
+  !/QuantGod_.*\.(json|csv)/i.test(service + panel),
+  'frontend automation chain must not read QuantGod runtime files directly',
+);
+assert(
+  !/OrderSend|quick-trade|telegram command|privateKey|password|apiKey/i.test(service + panel),
+  'frontend automation chain contains forbidden execution/secret wording',
+);
+assert(
+  panel.includes('USDJPY Shadow / ReadOnly') &&
     panel.includes('主状态来源') &&
-    panel.includes('实盘候选') &&
+    panel.includes('Shadow 候选') &&
     panel.includes('阻断原因') &&
-    panel.includes('机会入场'),
+    panel.includes('机会信号（只读）'),
   'AutomationChainPanel must expose Chinese status sections',
 );
 assert(

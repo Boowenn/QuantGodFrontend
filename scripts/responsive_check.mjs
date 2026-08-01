@@ -13,9 +13,6 @@ const ROUTES = [
   { name: 'mt5-strategy', path: '?workspace=mt5#mt5-strategy' },
   { name: 'mt5-trades', path: '?workspace=mt5#mt5-trades' },
   { name: 'evolution', path: '?workspace=evolution' },
-  { name: 'hfm-crypto', path: '?workspace=hfm-crypto' },
-  { name: 'hfm-crypto-status', path: '?workspace=hfm-crypto#status' },
-  { name: 'hfm-crypto-symbols', path: '?workspace=hfm-crypto#symbols' },
 ];
 const SCROLL_STEPS = [
   { name: 'top', ratio: 0 },

@@ -2,11 +2,11 @@
   <section class="qg-usdjpy-evolution">
     <header class="qg-usdjpy-evolution__header">
       <div>
-        <p class="qg-usdjpy-evolution__eyebrow">USDJPY 自学习闭环</p>
-        <h2>数据集、因果回放、前向验证与自主治理</h2>
+        <p class="qg-usdjpy-evolution__eyebrow">USDJPY Shadow / ReadOnly 研究闭环</p>
+        <h2>数据集、因果回放、前向验证与只读治理</h2>
         <p>
-          每天把 EA
-          守门、错失机会、过早出场和参数候选整理成证据；无需人工审批，但必须通过机器硬风控和自动回滚。
+          每天把 EA 守门、错失机会、过早出场和参数候选整理成证据；本页不生成执行授权，所有结果保持 Shadow /
+          ReadOnly。
         </p>
       </div>
       <div class="qg-usdjpy-evolution__actions">
@@ -42,9 +42,6 @@
             <button type="button" :disabled="loading" @click="runStrategyFactoryIntentPlan()">
               生成大白话策略
             </button>
-            <button type="button" :disabled="loading" @click="runHyperliquidShadowLane()">
-              建立 Hyperliquid 影子
-            </button>
             <button type="button" :disabled="loading" @click="runTelegramGatewayOpsCollect">
               收集通知报告
             </button>
@@ -76,8 +73,8 @@
         <span>运行数据集</span>
         <strong>{{ datasetSummary.sampleCount || 0 }}</strong>
         <p>
-          准入 {{ datasetSummary.readySignalCount || 0 }} / 实盘 {{ datasetSummary.actualEntryCount || 0 }} /
-          阻断 {{ datasetSummary.blockedCount || 0 }}
+          候选 {{ datasetSummary.readySignalCount || 0 }} / 历史成交证据
+          {{ datasetSummary.actualEntryCount || 0 }} / 阻断 {{ datasetSummary.blockedCount || 0 }}
         </p>
       </article>
       <article class="qg-usdjpy-evolution__card">
@@ -162,8 +159,8 @@
     <section v-if="lanes" class="qg-usdjpy-evolution__list qg-usdjpy-evolution__list--lanes">
       <div class="qg-usdjpy-evolution__section-head">
         <div>
-          <h3>三车道自主生命周期</h3>
-          <p>实盘要窄，模拟要宽，升降级要快，回滚要硬。</p>
+          <h3>三车道 Shadow / ReadOnly 生命周期</h3>
+          <p>执行候选证据要严，模拟研究要宽，升降级与回滚都只生成治理证据。</p>
         </div>
         <strong>{{
           autonomousLifecycle?.singleSourceOfTruth || 'USDJPY_LIVE_LOOP_WITH_AUTONOMOUS_LIFECYCLE'
@@ -171,22 +168,14 @@
       </div>
       <div class="qg-usdjpy-evolution__scenario-grid">
         <article>
-          <span>实盘车道</span>
-          <strong
-            >{{ liveLane.strategy || 'RSI_Reversal' }} /
-            {{ directionZh(liveLane.direction || 'LONG') }}</strong
-          >
-          <p>只允许 USDJPYc 买入路线进入 MICRO_LIVE / LIVE_LIMITED。</p>
+          <span>执行候选车道（只读）</span>
+          <strong>{{ liveLane.strategy || '证据不可用' }} / {{ directionZh(liveLane.direction) }}</strong>
+          <p>仅展示 USDJPYc 买入路线的候选阶段；本页不会切换执行模式。</p>
         </article>
         <article>
           <span>MT5 模拟车道</span>
           <strong>{{ mt5ShadowSummary.topShadowStrategy || '多策略观察' }}</strong>
           <p>模拟池包含 RSI、MA、BB、MACD、S/R、东京突破、夜盘回归和 H4 回调。</p>
-        </article>
-        <article>
-          <span>HFM Crypto 模拟车道</span>
-          <strong>{{ hfmCryptoShadow.statusZh || hfmCryptoShadow.status || '等待 symbol' }}</strong>
-          <p>{{ hfmCryptoShadow.blockers?.[0]?.reasonZh || '只做 HFM crypto CFD symbol 与 Moss 回测资料观察。' }}</p>
         </article>
         <article>
           <span>自动回滚</span>
@@ -199,7 +188,7 @@
         </article>
       </div>
       <p class="qg-usdjpy-evolution__note">
-        MT5 Shadow 第一名不会抢实盘路线；HFM Crypto 当前只做只读资料映射；DeepSeek 只解释，不批准越权。
+        MT5 Shadow 第一名只用于研究；DeepSeek 只解释，不批准越权或执行。
       </p>
     </section>
 
@@ -207,7 +196,7 @@
       <div class="qg-usdjpy-evolution__section-head">
         <div>
           <h3>自主治理代理</h3>
-          <p>取消人工审批不等于取消风控：代理只能写受控补丁，硬风控失败会自动回滚或暂停。</p>
+          <p>代理只能生成受控研究补丁与治理证据；硬风控失败时保持阻断，不产生执行授权。</p>
         </div>
         <strong>{{ autonomousAgent.stageZh || autonomousAgent.stage || '等待状态' }}</strong>
       </div>
@@ -215,7 +204,7 @@
         <article>
           <span>当前阶段</span>
           <strong>{{ autonomousAgent.stageZh || autonomousAgent.stage || '—' }}</strong>
-          <p>USDJPY-only / RSI_Reversal LONG 主线</p>
+          <p>USDJPY-only；当前只显示 Shadow / ReadOnly 路线证据。</p>
         </article>
         <article>
           <span>受控 patch</span>
@@ -231,17 +220,18 @@
         </article>
         <article>
           <span>仓位上限</span>
-          <strong>{{ agentLimits.stageMaxLot ?? 0 }} / {{ agentLimits.maxLot ?? 2 }}</strong>
-          <p>当前阶段 / 系统上限；最大 2.0 只是上限，不是固定仓位。</p>
+          <strong>{{ metricText(agentLimits.stageMaxLot) }} / {{ metricText(agentLimits.maxLot) }}</strong>
+          <p>当前阶段 / 系统上限；缺失任何一项时不可用于执行复核。</p>
         </article>
         <article>
           <span>美分账户</span>
           <strong
-            >{{ centAccount.accountMode || 'cent' }} / {{ centAccount.accountCurrencyUnit || 'USC' }}</strong
+            >{{ centAccount.accountMode || '证据不可用' }} /
+            {{ centAccount.accountCurrencyUnit || '证据不可用' }}</strong
           >
           <p>
-            加速 {{ centAccount.centAccountAcceleration ? '开启' : '关闭' }}；最大
-            {{ centAccount.maxLot ?? 2 }} 是上限，不是固定仓位。
+            加速 {{ booleanEvidenceText(centAccount.centAccountAcceleration) }}；最大
+            {{ metricText(centAccount.maxLot) }} 是上限，不是固定仓位。
           </p>
         </article>
       </div>
@@ -301,12 +291,12 @@
         </article>
         <article>
           <span>早盘作战计划</span>
-          <strong>{{ dailyAutopilot.morningPlan?.liveLane?.strategy || 'RSI_Reversal' }}</strong>
+          <strong>{{ dailyAutopilot.morningPlan?.liveLane?.strategy || '证据不可用' }}</strong>
           <p>
-            {{ dailyAutopilot.morningPlan?.liveLane?.symbol || 'USDJPYc' }}
-            {{ directionZh(dailyAutopilot.morningPlan?.liveLane?.direction || 'LONG') }}； 阶段仓位
-            {{ dailyAutopilot.morningPlan?.liveLane?.stageMaxLot ?? 0 }} / 上限
-            {{ dailyAutopilot.morningPlan?.liveLane?.maxLot ?? 2 }}
+            {{ dailyAutopilot.morningPlan?.liveLane?.symbol || '证据不可用' }}
+            {{ directionZh(dailyAutopilot.morningPlan?.liveLane?.direction) }}； 阶段仓位
+            {{ metricText(dailyAutopilot.morningPlan?.liveLane?.stageMaxLot) }} / 上限
+            {{ metricText(dailyAutopilot.morningPlan?.liveLane?.maxLot) }}
           </p>
         </article>
         <article>
@@ -322,11 +312,6 @@
             {{ dailyAutopilot.eveningReview?.mt5ShadowLane?.pausedCount || 0 }}，淘汰
             {{ dailyAutopilot.eveningReview?.mt5ShadowLane?.rejectedCount || 0 }}
           </p>
-        </article>
-        <article>
-          <span>HFM Crypto 日报</span>
-          <strong>{{ hfmCryptoShadow.statusZh || dailyAutopilot.morningPlan?.hfmCryptoLane?.stageZh || '等待 symbol' }}</strong>
-          <p>只做 crypto CFD symbol、Moss 回测资料和风控边界观察。</p>
         </article>
         <article>
           <span>今日硬禁止</span>
@@ -565,11 +550,9 @@
           :payload="gaFactoryPayload"
           :ga-status="gaStatus"
           :intent-plan="strategyIntentPlanPayload"
-          :hyperliquid-shadow="hyperliquidShadowPayload"
           :loading="loading"
           @build="runGAFactoryBuild"
           @build-intent="runStrategyFactoryIntentPlan"
-          @build-hyperliquid="runHyperliquidShadowLane"
         />
 
         <TelegramGatewayOpsPanel
@@ -941,8 +924,8 @@
         <article>
           <span>回测策略</span>
           <strong
-            >{{ strategyBacktestReport.strategyFamily || 'RSI_Reversal' }} /
-            {{ directionZh(strategyBacktestReport.direction || 'LONG') }}</strong
+            >{{ strategyBacktestReport.strategyFamily || '证据不可用' }} /
+            {{ directionZh(strategyBacktestReport.direction) }}</strong
           >
           <p class="qg-usdjpy-evolution__strategy-id">
             {{ strategyBacktestReport.strategyId || '策略契约种子' }}
@@ -1118,10 +1101,8 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallo
 import { buildCaseMemoryCandidates, fetchCaseMemoryStatus } from '../services/caseMemoryApi.js';
 import { fetchProductionEvidenceStatus } from '../services/productionEvidenceApi.js';
 import {
-  buildHyperliquidShadowLane,
   buildStrategyFactoryIntentPlan,
   buildStrategyGaFactory,
-  fetchHyperliquidShadowLane,
   fetchStrategyFactoryIntentPlan,
   fetchStrategyGaFactoryStatus,
 } from '../services/strategyGaFactoryApi.js';
@@ -1146,7 +1127,6 @@ import {
   fetchUSDJPYGAEvolutionPath,
   fetchUSDJPYGAStatus,
   fetchUSDJPYMt5ShadowLane,
-  fetchUSDJPYHfmCryptoShadowLane,
   fetchUSDJPYStrategyBacktestProductionStatus,
   fetchUSDJPYStrategyBacktestStatus,
   fetchUSDJPYStrategyContractStatus,
@@ -1189,7 +1169,6 @@ const autonomousAgent = shallowRef(null);
 const lifecyclePayload = shallowRef(null);
 const lanesPayload = shallowRef(null);
 const mt5ShadowPayload = shallowRef(null);
-const hfmCryptoShadowPayload = shallowRef(null);
 const eaReproPayload = shallowRef(null);
 const dailyAutopilot = shallowRef(null);
 const agentDailyTodo = shallowRef(null);
@@ -1200,7 +1179,6 @@ const gaPathPayload = shallowRef(null);
 const gaBlockersPayload = shallowRef(null);
 const gaFactoryPayload = shallowRef(null);
 const strategyIntentPlanPayload = shallowRef(null);
-const hyperliquidShadowPayload = shallowRef(null);
 const strategyBacktestPayload = shallowRef(null);
 const historyProductionPayload = shallowRef(null);
 const productionEvidencePayload = shallowRef(null);
@@ -1257,7 +1235,6 @@ const lanes = computed(
 );
 const liveLane = computed(() => lanes.value?.live || {});
 const mt5Shadow = computed(() => mt5ShadowPayload.value || lanes.value?.mt5Shadow || {});
-const hfmCryptoShadow = computed(() => hfmCryptoShadowPayload.value || lanes.value?.hfmCryptoShadow || {});
 const mt5ShadowSummary = computed(() => mt5Shadow.value?.summary || {});
 const newsGate = computed(
   () => dailyAutopilot.value?.newsGate || payload.value?.policy?.newsGate || barReplay.value?.newsGate || {},
@@ -1399,7 +1376,7 @@ const deepMql5Ea = computed(() => deepParity.value?.mql5Ea || {});
 const deepStrategySummary = computed(() => {
   const rsi = deepStrategyJson.value?.rsi || {};
   const family = deepStrategyJson.value?.strategyFamily || '等待策略';
-  const direction = directionZh(deepStrategyJson.value?.direction || 'LONG');
+  const direction = directionZh(deepStrategyJson.value?.direction);
   return `${family} / ${direction} / RSI ${metricText(rsi.period)}`;
 });
 const deepStrategyGateSummary = computed(() => {
@@ -1534,6 +1511,12 @@ function metricText(value, suffix = '') {
   return `${value}${suffix}`;
 }
 
+function booleanEvidenceText(value) {
+  if (value === true) return '开启';
+  if (value === false) return '关闭';
+  return '证据不可用';
+}
+
 function percentText(value) {
   if (value == null || value === '') return '—';
   const numeric = Number(value);
@@ -1548,8 +1531,8 @@ function statusZh(value, fallback = '等待自主代理处理') {
     WAITING_NEXT_PHASE: '等待下一阶段',
     PENDING: '等待自主代理',
     PROMOTED: '已晋级',
-    MICRO_LIVE: '极小仓实盘',
-    LIVE_LIMITED: '限制实盘',
+    MICRO_LIVE: 'MICRO_LIVE（只读证据）',
+    LIVE_LIMITED: 'LIVE_LIMITED（只读证据）',
     ROLLBACK: '已回滚',
     PAUSED: '已暂停',
     REJECTED: '已淘汰',
@@ -1969,9 +1952,9 @@ function conclusionZh(value) {
     FAST_SHADOW: '快速模拟',
     SHADOW_ONLY: '只进影子',
     TESTER_ONLY: '只进测试器',
-    PAPER_LIVE_SIM: '实盘行情干跑',
-    MICRO_LIVE: '极小仓实盘',
-    LIVE_LIMITED: '限制实盘',
+    PAPER_LIVE_SIM: '行情干跑（只读）',
+    MICRO_LIVE: 'MICRO_LIVE（只读证据）',
+    LIVE_LIMITED: 'LIVE_LIMITED（只读证据）',
     PAUSED: '暂停',
     ROLLBACK: '自动回滚',
     QUARANTINED: '隔离',
@@ -2063,11 +2046,6 @@ function strategyFactoryIntentSummary() {
   const personality = state.inferredPersonality || {};
   const seedCount = state.validation?.validSeedCount || 0;
   return `大白话策略已生成：${personality.strategyFamily || 'UNKNOWN'}；方向 ${(personality.directions || []).join('/') || 'UNKNOWN'}；有效 seed ${seedCount}；只进 shadow。`;
-}
-
-function hyperliquidShadowSummary() {
-  const state = hyperliquidShadowPayload.value?.report || hyperliquidShadowPayload.value || {};
-  return `Hyperliquid 影子车道已刷新：${state.statusZh || state.status || 'WAITING'}；目标 ${state.targetAgent?.agentId || '未设置'}；不授权钱包、不下单。`;
 }
 
 function telegramGatewayOpsSummary() {
@@ -2195,7 +2173,6 @@ function assignLoaded(results) {
   lifecyclePayload.value = results.lifecycle;
   lanesPayload.value = results.lanesState;
   mt5ShadowPayload.value = results.mt5ShadowState;
-  hfmCryptoShadowPayload.value = results.hfmCryptoShadowState;
   eaReproPayload.value = results.eaReproState;
   dailyAutopilot.value = results.dailyState;
   agentDailyTodo.value = results.dailyTodoState || results.dailyState?.dailyTodo || null;
@@ -2206,7 +2183,6 @@ function assignLoaded(results) {
   gaBlockersPayload.value = results.gaBlockers;
   gaFactoryPayload.value = results.gaFactoryState;
   strategyIntentPlanPayload.value = results.strategyIntentPlanState;
-  hyperliquidShadowPayload.value = results.hyperliquidShadowState;
   strategyBacktestPayload.value = results.strategyBacktestState;
   historyProductionPayload.value = results.historyProductionState;
   productionEvidencePayload.value = results.productionEvidenceState;
@@ -2244,7 +2220,6 @@ async function loadAll(options = {}) {
       ['lifecycle', () => fetchUSDJPYAutonomousLifecycle({}, options)],
       ['lanesState', () => fetchUSDJPYAutonomousLanes({}, options)],
       ['mt5ShadowState', () => fetchUSDJPYMt5ShadowLane({}, options)],
-      ['hfmCryptoShadowState', () => fetchUSDJPYHfmCryptoShadowLane({}, options)],
       ['eaReproState', () => fetchUSDJPYEaReproducibility({}, options)],
       ['dailyState', () => fetchUSDJPYDailyAutopilotV2({}, options)],
       ['dailyTodoState', () => fetchUSDJPYAgentDailyTodo({}, options)],
@@ -2255,7 +2230,6 @@ async function loadAll(options = {}) {
       ['gaBlockers', () => fetchUSDJPYGABlockers(options)],
       ['gaFactoryState', () => fetchStrategyGaFactoryStatus(options)],
       ['strategyIntentPlanState', () => fetchStrategyFactoryIntentPlan(options)],
-      ['hyperliquidShadowState', () => fetchHyperliquidShadowLane(options)],
       ['strategyBacktestState', () => fetchUSDJPYStrategyBacktestStatus(options)],
       ['historyProductionState', () => fetchUSDJPYStrategyBacktestProductionStatus(options)],
       ['productionEvidenceState', () => fetchProductionEvidenceStatus(options)],
@@ -2291,7 +2265,8 @@ async function load({ silent = false } = {}) {
   loadController = controller;
   loading.value = true;
   error.value = '';
-  if (!silent) setActionRunning('自主代理正在刷新页面证据', '正在读取数据集、回放、治理、三车道和日报状态。');
+  if (!silent)
+    setActionRunning('自主代理正在刷新页面证据', '正在读取 USDJPY 数据集、回放、治理、MT5 车道和日报状态。');
   try {
     const loaded = await loadAll({ signal: controller.signal });
     if (!loaded || controller.signal.aborted || runId !== loadRunId) return;
@@ -2400,37 +2375,12 @@ async function runStrategyFactoryIntentPlan(prompt = '') {
   }
 }
 
-async function runHyperliquidShadowLane(targetAgentInput = '') {
-  const targetAgentUrl = typeof targetAgentInput === 'object'
-    ? targetAgentInput.targetAgentUrl || ''
-    : targetAgentInput;
-  const targetAgentProfileJson = typeof targetAgentInput === 'object'
-    ? targetAgentInput.targetAgentProfileJson || ''
-    : '';
-  loading.value = true;
-  error.value = '';
-  setActionRunning(
-    '自主代理正在建立 Hyperliquid 影子车道',
-    '正在写入 Moss agent 只读映射；不会授权钱包，也不会下单。',
-  );
-  try {
-    hyperliquidShadowPayload.value = await buildHyperliquidShadowLane({ targetAgentUrl, targetAgentProfileJson });
-    await loadAll();
-    setActionSuccess('Hyperliquid 影子车道已刷新', hyperliquidShadowSummary());
-  } catch (err) {
-    error.value = err?.message || 'Hyperliquid 影子车道生成失败';
-    setActionError('Hyperliquid shadow 失败', err, 'Hyperliquid 影子车道生成失败');
-  } finally {
-    loading.value = false;
-  }
-}
-
 async function runTelegramGatewayOpsCollect() {
   loading.value = true;
   error.value = '';
   setActionRunning(
     '自主代理正在收集通知报告',
-    '正在把日报、GA、Agent 和 HFM Crypto 报告送入 push-only Gateway 队列。',
+    '正在把 USDJPY 日报、GA 和 Agent 报告送入 push-only Gateway 队列。',
   );
   try {
     telegramGatewayOpsPayload.value = await collectTelegramGatewayOps();

@@ -129,7 +129,6 @@ function assertWorkflowShape(label, rel, buffer) {
     'governance-workspace',
     'paramlab-workspace',
     'research-workspace',
-    'hfm-crypto-workspace',
     'legacy-deprecation',
     'legacy-slim',
   ];
