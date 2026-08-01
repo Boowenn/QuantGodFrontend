@@ -27,7 +27,10 @@ function assertReadableSource(file, text) {
 }
 
 function assertNoRuntimeReads(file, text) {
-  assertCondition(!/QuantGod_.*\.(json|csv|jsonl)/.test(text), `${file} must not read runtime files directly`);
+  assertCondition(
+    !/QuantGod_.*\.(json|csv|jsonl)/.test(text),
+    `${file} must not read runtime files directly`,
+  );
 }
 
 function assertNoTradingTokens(file, text) {
@@ -35,7 +38,7 @@ function assertNoTradingTokens(file, text) {
 }
 
 function assertContainsMarker(file, text, marker) {
-  assertCondition(text.includes(marker), `${file} missing execution feedback coverage marker ${marker}`);
+  assertCondition(text.includes(marker), `${file} missing Shadow/historical feedback marker ${marker}`);
 }
 
 for (const file of files) {
@@ -46,7 +49,14 @@ for (const file of files) {
 }
 
 const card = readSource('src/components/ExecutionFeedbackCoverageCard.vue');
-for (const marker of ['执行反馈样本覆盖率', 'coverageGrade', 'fieldCoverage', 'coreCoverage', 'numericSummary']) {
+for (const marker of [
+  '影子 / 历史反馈覆盖率',
+  '不代表当前可执行',
+  'coverageGrade',
+  'fieldCoverage',
+  'coreCoverage',
+  'numericSummary',
+]) {
   assertContainsMarker('src/components/ExecutionFeedbackCoverageCard.vue', card, marker);
 }
 

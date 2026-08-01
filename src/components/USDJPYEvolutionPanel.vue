@@ -108,7 +108,7 @@
         <p>策略契约 / Python 回放 / EA 三方口径审计，不通过不能晋级。</p>
       </article>
       <article class="qg-usdjpy-evolution__card">
-        <span>执行反馈</span>
+        <span>影子 / 历史反馈</span>
         <strong>{{ executionGateStatusZh }}</strong>
         <p>
           样本 {{ executionMetrics.feedbackRows || 0 }} / 阻断 {{ executionBlockers.length }} / 警告
@@ -137,7 +137,7 @@
         <span>02</span>
         <div>
           <strong>治理与安全</strong>
-          <p>再确认三车道、硬门禁、自动日报和受控 patch 状态。</p>
+          <p>再确认 Shadow 生命周期、硬门禁、自动日报和受控 patch 状态。</p>
         </div>
       </div>
       <div class="qg-usdjpy-evolution__chapter-label qg-usdjpy-evolution__chapter-label--ga">
@@ -150,8 +150,8 @@
       <div class="qg-usdjpy-evolution__chapter-label qg-usdjpy-evolution__chapter-label--execution">
         <span>04</span>
         <div>
-          <strong>执行证据</strong>
-          <p>最后展开执行反馈、经验记忆、通知网关和生产证据。</p>
+          <strong>影子与历史证据</strong>
+          <p>最后展开影子评估、历史兼容反馈、经验记忆、通知网关和生产证据。</p>
         </div>
       </div>
     </template>
@@ -159,8 +159,8 @@
     <section v-if="lanes" class="qg-usdjpy-evolution__list qg-usdjpy-evolution__list--lanes">
       <div class="qg-usdjpy-evolution__section-head">
         <div>
-          <h3>三车道 Shadow / ReadOnly 生命周期</h3>
-          <p>执行候选证据要严，模拟研究要宽，升降级与回滚都只生成治理证据。</p>
+          <h3>Shadow / ReadOnly 生命周期</h3>
+          <p>Shadow 建议证据要严，模拟研究要宽，升降级与回滚都只生成治理证据。</p>
         </div>
         <strong>{{
           autonomousLifecycle?.singleSourceOfTruth || 'USDJPY_LIVE_LOOP_WITH_AUTONOMOUS_LIFECYCLE'
@@ -168,9 +168,9 @@
       </div>
       <div class="qg-usdjpy-evolution__scenario-grid">
         <article>
-          <span>执行候选车道（只读）</span>
+          <span>Shadow Advisory 车道</span>
           <strong>{{ liveLane.strategy || '证据不可用' }} / {{ directionZh(liveLane.direction) }}</strong>
-          <p>仅展示 USDJPYc 买入路线的候选阶段；本页不会切换执行模式。</p>
+          <p>旧 liveLane 字段仅展示 USDJPYc 影子建议；当前没有 execution lane。</p>
         </article>
         <article>
           <span>MT5 模拟车道</span>
@@ -219,9 +219,9 @@
           </p>
         </article>
         <article>
-          <span>仓位上限</span>
+          <span>研究 lot 上限（兼容字段）</span>
           <strong>{{ metricText(agentLimits.stageMaxLot) }} / {{ metricText(agentLimits.maxLot) }}</strong>
-          <p>当前阶段 / 系统上限；缺失任何一项时不可用于执行复核。</p>
+          <p>当前阶段 / 系统研究估计；任何数值都不能成为 broker order 参数。</p>
         </article>
         <article>
           <span>美分账户</span>
@@ -236,8 +236,8 @@
         </article>
       </div>
       <p class="qg-usdjpy-evolution__note">
-        DeepSeek 只解释晋级和回滚原因，不能批准
-        live、不能取消回滚、不能提高最大仓位、不能放宽点差/runtime/高冲击新闻门禁。
+        DeepSeek 只解释研究晋级和回滚原因；当前没有可批准的 live lane，也不能取消回滚、修改 preset
+        或放宽点差/runtime/高冲击新闻门禁。
       </p>
     </section>
 
@@ -290,11 +290,11 @@
           </p>
         </article>
         <article>
-          <span>早盘作战计划</span>
+          <span>早盘 Shadow 观察计划</span>
           <strong>{{ dailyAutopilot.morningPlan?.liveLane?.strategy || '证据不可用' }}</strong>
           <p>
             {{ dailyAutopilot.morningPlan?.liveLane?.symbol || '证据不可用' }}
-            {{ directionZh(dailyAutopilot.morningPlan?.liveLane?.direction) }}； 阶段仓位
+            {{ directionZh(dailyAutopilot.morningPlan?.liveLane?.direction) }}； 研究 lot
             {{ metricText(dailyAutopilot.morningPlan?.liveLane?.stageMaxLot) }} / 上限
             {{ metricText(dailyAutopilot.morningPlan?.liveLane?.maxLot) }}
           </p>
@@ -423,10 +423,9 @@
     <section class="qg-usdjpy-evolution__list qg-usdjpy-evolution__list--evidence-os">
       <div class="qg-usdjpy-evolution__section-head">
         <div>
-          <h3>执行反馈、经验记忆与下一代遗传进化</h3>
+          <h3>影子 / 历史反馈、经验记忆与下一代遗传进化</h3>
           <p>
-            真实成交、拒单、滑点、延迟和未经授权 live 执行偏离会先进入执行反馈晋级门；异常再转成经验记忆，
-            最后喂给下一代策略契约遗传进化。
+            当前影子评估与已有历史反馈只用于审计和经验记忆；生产 EA 不会生成新的 broker 成交、拒单或改单事件。
           </p>
         </div>
         <strong>{{ executionGateStatusZh }}</strong>
@@ -453,17 +452,19 @@
           <p>{{ deepEaGateSummary }}</p>
         </article>
         <article>
-          <span>执行晋级门</span>
-          <strong>{{ executionPromotionAllowed ? '允许作为晋级证据' : '不允许扩大阶段' }}</strong>
-          <p>{{ executionGate.reasonZh || '等待 EA 输出标准化 LiveExecutionFeedback。' }}</p>
+          <span>反馈可信度门</span>
+          <strong>{{
+            executionPromotionAllowed ? '可用于 Shadow 研究晋级' : '保持 Shadow / 待补证据'
+          }}</strong>
+          <p>{{ executionGate.reasonZh || '等待 Shadow 评估或历史兼容反馈。' }}</p>
         </article>
         <article>
           <span>代理动作</span>
           <strong>{{ executionAgentActionZh }}</strong>
-          <p>{{ executionFeedback.nextActionZh || '等待真实执行反馈后再评估。' }}</p>
+          <p>{{ executionFeedback.nextActionZh || '等待 Shadow 评估或历史只读反馈后再评估。' }}</p>
         </article>
         <article>
-          <span>执行质量</span>
+          <span>历史 / 模拟质量</span>
           <strong>{{ executionMetrics.feedbackQuality || 'MISSING' }}</strong>
           <p>
             拒单 {{ executionMetrics.rejectCount || 0 }} / 滑点
@@ -494,12 +495,12 @@
       </div>
       <div v-if="executionBlockers.length || executionWarnings.length" class="qg-usdjpy-evolution__mini-list">
         <article v-for="item in executionBlockers.slice(0, 4)" :key="`block-${item.code}`">
-          <span>执行阻断</span>
+          <span>反馈阻断</span>
           <strong>{{ item.code }}</strong>
           <p>{{ item.reasonZh }}</p>
         </article>
         <article v-for="item in executionWarnings.slice(0, 4)" :key="`warn-${item.code}`">
-          <span>执行警告</span>
+          <span>反馈警告</span>
           <strong>{{ item.code }}</strong>
           <p>{{ item.reasonZh }}</p>
         </article>
@@ -527,8 +528,8 @@
         </table>
       </div>
       <p class="qg-usdjpy-evolution__note">
-        这里不下单、不改 live preset；它只决定执行证据是否能支持晋级，以及下一代 GA
-        该优先修哪类执行或策略问题。
+        这里不下单、不改 preset；它只判断影子/历史证据是否支持研究晋级，以及下一代 GA
+        该优先修哪类观察或策略问题。当前始终保持 executionLaneExists=false。
       </p>
     </section>
 
@@ -572,7 +573,7 @@
           <h3>遗传进化全过程审计</h3>
           <p>
             策略契约种子、代际、适应度、阻断、精英和下一代路径全部可追踪；只进入 MT5 模拟、
-            测试器和实盘行情干跑。
+            测试器和实时行情只读干跑。
           </p>
         </div>
         <strong>{{ statusZh(gaStatus.status, '等待第一代') }}</strong>
@@ -620,7 +621,7 @@
               <th>Sharpe / Sortino</th>
               <th>交易数</th>
               <th>历史样本</th>
-              <th>Parity / 执行</th>
+              <th>Parity / 影子与历史反馈</th>
               <th>Rank</th>
               <th>阶段</th>
               <th>阻断原因</th>
@@ -837,7 +838,7 @@
             <span>晋级证据</span>
             <strong>{{ gaEvidenceGateSummary(selectedGASeed) }}</strong>
             <p>
-              一致性 {{ gaSeedParityStatus(selectedGASeed) }}；执行反馈
+              一致性 {{ gaSeedParityStatus(selectedGASeed) }}；影子 / 历史反馈
               {{ gaSeedExecutionStatus(selectedGASeed) }}；经验惩罚
               {{ metricText(selectedGASeed.fitnessBreakdown?.caseMemory?.penalty) }}
             </p>
@@ -904,8 +905,8 @@
         <pre>{{ strategyJsonPreview(selectedGASeed.strategyJson) }}</pre>
       </div>
       <p class="qg-usdjpy-evolution__note">
-        遗传进化不能直接实盘、不能进入极小仓实盘、不能修改实盘配置、不能提高最大仓位、不能绕过新闻、点差、
-        运行新鲜度和快通道门禁。
+        遗传进化永久保持 Shadow / tester，不能创建 execution lane、修改 preset 或恢复 broker mutation，
+        也不能绕过新闻、点差、运行新鲜度和快通道证据门禁。
       </p>
     </section>
 
@@ -986,7 +987,7 @@
       </div>
       <p class="qg-usdjpy-evolution__note">
         本模块只写本地回测库、JSON 和 CSV；已覆盖 USDJPY 模拟策略族并向遗传进化提供逐候选
-        适应度证据；不会下单、不会平仓、不会撤单、不会修改实盘配置。
+        适应度证据；不会下单、不会平仓、不会撤单、不会修改 preset。
       </p>
     </section>
 
@@ -1037,7 +1038,7 @@
       <div class="qg-usdjpy-evolution__section-head">
         <div>
           <h3>Strategy JSON → EA 契约</h3>
-          <p>策略契约 → EA 只读契约候选，在模拟、测试器和实盘行情干跑车道按同一契约做只读评估。</p>
+          <p>策略契约 → EA 只读契约候选，在模拟、测试器和 MT5 实时行情干跑中按同一契约评估。</p>
         </div>
         <strong>{{ strategyContractStatusZh }}</strong>
       </div>
@@ -1531,8 +1532,8 @@ function statusZh(value, fallback = '等待自主代理处理') {
     WAITING_NEXT_PHASE: '等待下一阶段',
     PENDING: '等待自主代理',
     PROMOTED: '已晋级',
-    MICRO_LIVE: 'MICRO_LIVE（只读证据）',
-    LIVE_LIMITED: 'LIVE_LIMITED（只读证据）',
+    MICRO_LIVE: 'MICRO_LIVE（已退役，按影子显示）',
+    LIVE_LIMITED: 'LIVE_LIMITED（已退役，按影子显示）',
     ROLLBACK: '已回滚',
     PAUSED: '已暂停',
     REJECTED: '已淘汰',
@@ -1580,26 +1581,26 @@ function boolZh(value) {
 
 function executionGateZh(value) {
   const map = {
-    PASS: '执行反馈通过',
-    WATCH: '执行风险观察',
-    BLOCKED: '执行反馈阻断',
-    WAITING_FEEDBACK: '等待执行反馈',
-    MISSING: '等待执行反馈',
-    UNKNOWN: '等待执行反馈',
+    PASS: '影子 / 历史反馈可用',
+    WATCH: '反馈质量观察',
+    BLOCKED: '反馈证据阻断',
+    WAITING_FEEDBACK: '等待影子 / 历史反馈',
+    MISSING: '等待影子 / 历史反馈',
+    UNKNOWN: '等待影子 / 历史反馈',
   };
   const key = String(value || '').toUpperCase();
-  return map[key] || value || '等待执行反馈';
+  return map[key] || value || '等待影子 / 历史反馈';
 }
 
 function agentActionZh(value) {
   const map = {
     BLOCK_PROMOTION_AND_QUEUE_CASE_MEMORY: '阻断晋级并写入经验记忆',
     KEEP_SHADOW_AND_MONITOR_EXECUTION: '继续影子观察',
-    ALLOW_EXECUTION_FEEDBACK_TO_SUPPORT_PROMOTION: '允许支持晋级',
-    WAIT_FOR_LIVE_EXECUTION_FEEDBACK: '等待执行反馈',
+    ALLOW_EXECUTION_FEEDBACK_TO_SUPPORT_PROMOTION: '允许支持 Shadow 研究晋级',
+    WAIT_FOR_LIVE_EXECUTION_FEEDBACK: '等待影子 / 历史反馈',
   };
   const key = String(value || '').toUpperCase();
-  return map[key] || value || '等待执行反馈';
+  return map[key] || value || '等待影子 / 历史反馈';
 }
 
 function mutationHintZh(value) {
@@ -1612,7 +1613,7 @@ function mutationHintZh(value) {
     reduce_execution_latency: '降低执行延迟',
     verify_execution_ack_fill_sync: '核对 accepted/fill 回执同步',
     verify_ea_policy_sync: '核对 EA 与 policy 同步',
-    verify_live_lane_strategy_lock: '核对实盘策略锁',
+    verify_live_lane_strategy_lock: '核对已退役 live 字段的影子映射',
     keep_soft_news_gate: '保持软新闻门禁',
     reject_unstable_seed: '淘汰不稳定候选',
     reduce_mutation_rate: '降低遗传进化变异幅度',
@@ -1953,13 +1954,13 @@ function conclusionZh(value) {
     SHADOW_ONLY: '只进影子',
     TESTER_ONLY: '只进测试器',
     PAPER_LIVE_SIM: '行情干跑（只读）',
-    MICRO_LIVE: 'MICRO_LIVE（只读证据）',
-    LIVE_LIMITED: 'LIVE_LIMITED（只读证据）',
+    MICRO_LIVE: 'MICRO_LIVE（已退役，按影子显示）',
+    LIVE_LIMITED: 'LIVE_LIMITED（已退役，按影子显示）',
     PAUSED: '暂停',
     ROLLBACK: '自动回滚',
     QUARANTINED: '隔离',
     PAPER_CONTEXT: '事件参考',
-    LIVE_CONFIG_PROPOSAL_ELIGIBLE: '可进配置提案',
+    LIVE_CONFIG_PROPOSAL_ELIGIBLE: '旧配置提案字段（只读）',
   };
   return map[value] || value || '待补样本';
 }
@@ -2015,9 +2016,9 @@ function governanceSummary() {
       lifecyclePayload.value?.executionStage,
     '等待治理门',
   );
-  const liveStage = statusZh(liveLane.value?.executionStage || liveLane.value?.stage, '实盘车道等待');
+  const liveStage = statusZh(liveLane.value?.executionStage || liveLane.value?.stage, 'Shadow Advisory 等待');
   const mt5Count = mt5ShadowSummary.value?.totalRoutes ?? mt5ShadowSummary.value?.routeCount ?? 0;
-  return `自主治理已运行：代理阶段 ${stage}；实盘车道 ${liveStage}；MT5 模拟车道 ${mt5Count} 条路线。`;
+  return `自主治理已运行：代理阶段 ${stage}；Shadow Advisory ${liveStage}；MT5 模拟车道 ${mt5Count} 条路线；无 execution lane。`;
 }
 
 function dailySummary() {
@@ -2286,7 +2287,7 @@ async function load({ silent = false } = {}) {
 async function runAutonomousGovernance() {
   loading.value = true;
   error.value = '';
-  setActionRunning('自主代理正在运行治理门', '正在执行前向验证、治理门和三车道刷新。');
+  setActionRunning('自主代理正在运行治理门', '正在执行前向验证、治理门和 Shadow 生命周期刷新。');
   try {
     await runUSDJPYWalkForwardBuild();
     autonomousAgent.value = await runUSDJPYAutonomousAgent();
@@ -2399,7 +2400,7 @@ async function runStrategyContract() {
   error.value = '';
   setActionRunning(
     '自主代理正在生成 EA 只读契约',
-    '正在把最新策略契约候选写成 EA 可读取的模拟/测试器/实盘行情干跑评估契约。',
+    '正在把最新策略契约候选写成 EA 可读取的模拟/测试器/MT5 行情只读评估契约。',
   );
   try {
     strategyContractPayload.value = await buildUSDJPYStrategyContract();
@@ -2438,7 +2439,7 @@ async function runEvidenceOS() {
   error.value = '';
   setActionRunning(
     '自主代理正在生成证据系统',
-    '正在同步真实 USDJPY K线、运行策略契约回测、三方一致性、执行反馈和经验记忆。',
+    '正在同步 USDJPY K线、运行策略契约回测、三方一致性、影子/历史反馈和经验记忆。',
   );
   try {
     await syncUSDJPYStrategyBacktestKlines();
@@ -2459,7 +2460,7 @@ async function runCaseMemoryBuild() {
   error.value = '';
   setActionRunning(
     '自主代理正在生成经验候选',
-    '正在把错失机会、早出场、执行反馈和 GA blocker 转成 shadow Strategy JSON candidate。',
+    '正在把错失机会、早出场、影子/历史反馈和 GA blocker 转成 shadow Strategy JSON candidate。',
   );
   try {
     caseMemoryCandidatePayload.value = await buildCaseMemoryCandidates();

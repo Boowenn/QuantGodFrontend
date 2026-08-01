@@ -1,6 +1,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { fetchProductionEvidenceStatus, runProductionEvidenceValidation } from '../services/productionEvidenceApi.js';
+import {
+  fetchProductionEvidenceStatus,
+  runProductionEvidenceValidation,
+} from '../services/productionEvidenceApi.js';
 
 const loading = ref(false);
 const error = ref('');
@@ -41,8 +44,8 @@ onMounted(() => load(false));
   <section class="qg-usdjpy-evolution__list qg-usdjpy-evolution__list--execution-feedback">
     <div class="qg-usdjpy-evolution__section-head">
       <div>
-        <h3>执行反馈样本覆盖率</h3>
-        <p>量化 live / shadow execution feedback 是否足够进入 Case Memory 与 GA fitness。</p>
+        <h3>影子 / 历史反馈覆盖率</h3>
+        <p>量化 Shadow 评估与历史兼容反馈是否足够进入 Case Memory 与 GA fitness；不代表当前可执行。</p>
       </div>
       <button type="button" :disabled="loading" @click="load(true)">
         {{ loading ? '刷新中...' : '刷新覆盖率' }}
@@ -70,7 +73,7 @@ onMounted(() => load(false));
       <article>
         <span>字段覆盖率</span>
         <strong>{{ formatPercent(coverage.fieldCoverage) }}</strong>
-        <p>用于判断能否进入生产级裁决。</p>
+        <p>用于判断能否进入高质量研究裁决。</p>
       </article>
     </div>
 
@@ -78,7 +81,7 @@ onMounted(() => load(false));
       <article>
         <span>阻断 / 警告</span>
         <strong>{{ blockers.length || 0 }} 项</strong>
-        <p>{{ blockers[0] || '暂无执行反馈阻断。' }}</p>
+        <p>{{ blockers[0] || '暂无反馈证据阻断。' }}</p>
       </article>
       <article>
         <span>建议动作</span>
@@ -88,12 +91,12 @@ onMounted(() => load(false));
       <article>
         <span>平均滑点</span>
         <strong>{{ numericSummary.slippagePips?.avg ?? '—' }}</strong>
-        <p>pips，来自标准化 execution feedback。</p>
+        <p>pips，仅来自明确标注的历史或模拟反馈。</p>
       </article>
       <article>
         <span>平均延迟</span>
         <strong>{{ numericSummary.latencyMs?.avg ?? '—' }}</strong>
-        <p>ms，来自 EA / shadow 执行反馈。</p>
+        <p>ms，仅来自 EA Shadow 或历史兼容反馈。</p>
       </article>
       <article>
         <span>平均 profitR</span>

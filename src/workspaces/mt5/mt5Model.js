@@ -433,9 +433,26 @@ function dailyReviewIsFresh(payload = {}) {
   return keys.includes(jstTodayKey());
 }
 
-function liveLoopStatusTone(value) {
+function liveLoopAdvisoryReady(value, payload = {}) {
   const text = String(value || '').toUpperCase();
-  if (text.includes('READY')) return 'ok';
+  return (
+    payload.advisoryReady === true ||
+    payload.shadowAdvisoryReady === true ||
+    text === 'SHADOW_ADVISORY_READY' ||
+    text === 'READY_FOR_EXISTING_EA'
+  );
+}
+
+function liveLoopStateLabel(value, label) {
+  const text = String(value || '').toUpperCase();
+  if (text === 'SHADOW_ADVISORY_READY') return '影子建议已就绪';
+  if (text === 'READY_FOR_EXISTING_EA') return '影子建议已就绪（旧契约）';
+  return label || humanizeStatus(value);
+}
+
+function liveLoopStatusTone(value, payload = {}) {
+  const text = String(value || '').toUpperCase();
+  if (liveLoopAdvisoryReady(text, payload)) return 'ok';
   if (text.includes('BLOCK') || text.includes('PAUSE') || text.includes('MISSING')) return 'error';
   if (text.includes('WAIT')) return 'warn';
   return 'warn';
@@ -528,12 +545,13 @@ function evidenceGateTone(value) {
 
 function executionGateZh(value) {
   const text = String(value || '').toUpperCase();
-  if (text.includes('PASS') || text.includes('ALLOW') || text.includes('READY')) return '允许晋级观察';
-  if (text.includes('BLOCK')) return '执行反馈阻断晋级';
-  if (text.includes('FAIL')) return '执行反馈未通过';
-  if (text.includes('WATCH')) return '执行反馈观察中';
-  if (text.includes('WAIT')) return '等待执行反馈';
-  return humanizeStatus(value || '等待执行反馈');
+  if (text.includes('PASS') || text.includes('ALLOW') || text.includes('READY'))
+    return '可用于 Shadow 研究晋级';
+  if (text.includes('BLOCK')) return '反馈证据阻断研究晋级';
+  if (text.includes('FAIL')) return '反馈证据未通过';
+  if (text.includes('WATCH')) return '反馈证据观察中';
+  if (text.includes('WAIT')) return '等待影子 / 历史反馈';
+  return humanizeStatus(value || '等待影子 / 历史反馈');
 }
 
 function mutationHintZh(value) {
@@ -925,8 +943,8 @@ function accountStatusLabel(account = {}) {
     return account.marketSession === 'MARKET_CLOSED' ? 'Shadow / 只读（MARKET_CLOSED）' : 'Shadow / 只读观察';
   }
   if (account.marketSession === 'MARKET_CLOSED') return 'MARKET_CLOSED / 只读已连接';
-  if (!accountAutoTradingEnabled(account)) return '等待 EA 权限';
-  return '后端条件齐全（前端只读）';
+  if (!accountAutoTradingEnabled(account)) return '只读观察（不会执行交易）';
+  return '旧执行字段已降级为只读观察';
 }
 
 function accountConnectionAxisItems(account = {}) {
@@ -979,20 +997,17 @@ function accountConnectionAxisItems(account = {}) {
       hint: account.marketSession === 'MARKET_CLOSED' ? '外汇休市，只保留 Shadow / ReadOnly 观察。' : '',
     },
     {
-      label: '交易准备度',
+      label: '影子观察状态',
       value: account.tradingReady
-        ? '条件齐全（界面仍只读）'
+        ? '旧 ready 已降级为 Shadow 建议'
         : shadowOnly
-          ? 'Shadow / ReadOnly（不执行）'
+          ? 'Shadow / ReadOnly（无执行通道）'
           : account.marketSession === 'MARKET_CLOSED'
             ? 'MARKET_CLOSED'
-            : 'NOT_READY',
-      status: account.tradingReady
-        ? 'error'
-        : shadowOnly || account.marketSession === 'MARKET_CLOSED'
-          ? 'warn'
-          : 'blocked',
-      hint: '此字段是后端证据汇总，不是下单授权；前端没有发单能力。',
+            : '等待只读观察证据',
+      status:
+        account.tradingReady || shadowOnly || account.marketSession === 'MARKET_CLOSED' ? 'warn' : 'blocked',
+      hint: '仅表示观察与建议证据；EA、前端和自动化都没有 broker mutation 通道。',
     },
   ];
 }
@@ -1004,7 +1019,7 @@ export function buildMt5PrimaryAxisItems(snapshot = {}) {
 function accountPermissionItem(account = {}) {
   if (!account.ok) {
     return {
-      label: 'MT5 权限',
+      label: 'MT5 权限证据',
       value: '未知 / 已阻断',
       status: 'blocked',
       hint: '账号或快照接口没有明确返回 ok=true；恢复只读证据前禁止把缺失值当作安全。',
@@ -1014,12 +1029,12 @@ function accountPermissionItem(account = {}) {
     const freshness = account.freshness || {};
     const blocked = account.hostProcessMissing || freshnessMissing(freshness);
     return {
-      label: 'MT5 权限',
+      label: 'MT5 权限证据',
       value: account.hostProcessMissing ? 'writer 未运行' : freshnessStatusLabel(freshness),
       status: blocked ? 'blocked' : 'warn',
       hint: account.hostProcessMissing
-        ? '未检测到 terminal64/wine 进程；先恢复 MT5/EA dashboard writer，再判断交易权限。'
-        : freshnessRecoveryHint(freshness, '等待新鲜 MT5 快照后再判断交易权限。'),
+        ? '未检测到 terminal64/wine 进程；先恢复 MT5/EA dashboard writer，再判断账号与只读观察状态。'
+        : freshnessRecoveryHint(freshness, '等待新鲜 MT5 快照后再判断只读观察状态。'),
     };
   }
   const flags = [
@@ -1032,18 +1047,18 @@ function accountPermissionItem(account = {}) {
   const missingFlags = flags.filter((value) => value === null || value === undefined || value === '');
   if (missingFlags.length) {
     return {
-      label: 'MT5 权限',
+      label: 'MT5 权限证据',
       value: '证据不完整 / 已阻断',
       status: 'blocked',
-      hint: `缺少 ${missingFlags.length} 项明确权限证据；终端、程序、账号、EA 与品种权限必须全部返回 true。`,
+      hint: `缺少 ${missingFlags.length} 项终端权限诊断证据；这些字段只用于观察，不构成执行授权。`,
     };
   }
   const allPassed = flags.every((value) => value === true);
   return {
-    label: 'MT5 权限',
-    value: allPassed ? '全部通过' : '有阻断',
+    label: 'MT5 权限证据',
+    value: allPassed ? '已观测（不构成执行授权）' : '证据有阻断',
     status: allPassed ? 'ok' : 'blocked',
-    hint: `终端 ${passText(account.terminalTradeAllowed)} / 程序 ${passText(
+    hint: `只读诊断：终端 ${passText(account.terminalTradeAllowed)} / 程序 ${passText(
       account.programTradeAllowed,
     )} / 账号 ${passText(account.accountTradeAllowed)} / EA ${passText(
       account.accountExpertTradeAllowed,
@@ -1098,7 +1113,13 @@ function spreadGateHint(spreadGate = {}, isUsdLane = false, marketSession = '') 
   if (marketSession === 'MARKET_CLOSED') {
     return '休市报价冻结，当前点差不参与就绪或硬阻断判断；开市后等待新报价再评估。';
   }
-  const action = isUsdLane ? spreadGate.usdActionZh : spreadGate.centActionZh;
+  const tier = String(spreadGate.tier || '').toUpperCase();
+  const action =
+    spreadGate.hardBlock || tier === 'HARD_WIDE'
+      ? '阻断新的 Shadow 建议'
+      : tier.includes('SOFT_WIDE')
+        ? '降低 Shadow 建议权重'
+        : '保持 Shadow 研究观察';
   const limits = [
     numberValue(spreadGate.normalLimitPips),
     numberValue(spreadGate.softLimitPips),
@@ -1106,7 +1127,7 @@ function spreadGateHint(spreadGate = {}, isUsdLane = false, marketSession = '') 
   ]
     .map((value) => (value === null ? '—' : value.toFixed(1)))
     .join(' / ');
-  return `${action || spreadGate.reasonZh || '按点差等级降级/阻断。'} 正常/软/硬阈值 ${limits} pips`;
+  return `${action}；${isUsdLane ? 'USD ReadOnly' : 'Cent Shadow'} 仅作研究对照。正常/软/硬阈值 ${limits} pips`;
 }
 
 function spreadGateDiagnosticConclusion(spreadGate = {}, marketSession = '') {
@@ -1189,7 +1210,7 @@ function accountCard(account = {}, fallback = {}) {
       account.startupGuardReason ||
       account.tradePermissionBlocker ||
       account.error ||
-      'EA 是否真正入场仍由 session、点差、新闻、启动保护和信号守门共同决定。',
+      'EA 只记录 Shadow 观察与建议；session、点差、新闻和信号仅影响研究结论，不会触发交易。',
     items: [
       { label: '账号', value: maskAccountLogin(account.login) },
       { label: '服务器', value: account.server || '—' },
@@ -1205,7 +1226,7 @@ function accountCard(account = {}, fallback = {}) {
                   ? 'ok'
                   : 'warn',
               hint: account.hostProcessMissing
-                ? '先恢复对应 terminal64/wine 与 EA dashboard writer，再判断当前账号、持仓和交易权限。'
+                ? '先恢复对应 terminal64/wine 与 EA dashboard writer，再判断当前账号、持仓和只读观察状态。'
                 : '按只读桥 hostProcess 证据判断。',
             },
           ]
@@ -1239,18 +1260,16 @@ function accountCard(account = {}, fallback = {}) {
           : `历史证据：${accountSymbolLabel(account)}；${accountMarketHint(account)}`,
       },
       {
-        label: '后端执行守门',
-        value: !currentStateTrusted
-          ? '不可用 / 已阻断'
-          : accountAutoTradingEnabled(account)
-            ? '条件齐全（前端只读）'
-            : 'Shadow / ReadOnly（不执行）',
+        label: '执行边界',
+        value: !currentStateTrusted ? '不可用 / 已阻断' : 'Shadow / ReadOnly（无执行通道）',
         status: !currentStateTrusted ? 'blocked' : 'warn',
         hint: !currentStateTrusted
           ? accountSnapshotHint
-          : `执行开关 ${onOffText(account.executionEnabled)} / livePilot ${onOffText(
-              account.livePilotMode,
-            )} / 交易权限 ${onOffText(account.tradeAllowed)}`,
+          : `旧终端执行字段仅作诊断：execution ${onOffText(
+              account.executionEnabled,
+            )} / livePilot ${onOffText(account.livePilotMode)} / tradeAllowed ${onOffText(
+              account.tradeAllowed,
+            )}；不会执行交易。`,
       },
       ...(latestFreshness
         ? [
@@ -1280,15 +1299,17 @@ function accountCard(account = {}, fallback = {}) {
             {
               label: '账户车道',
               value: currentStateTrusted
-                ? lane.laneZh || humanizeStatus(lane.lane || lane.role)
+                ? isUsdLane
+                  ? 'USD ReadOnly / Paper Mirror'
+                  : 'Cent Shadow / ReadOnly'
                 : '不可用 / 已阻断',
               status: currentStateTrusted ? (isUsdLane ? 'warn' : 'ok') : 'blocked',
               hint: currentStateTrusted
-                ? lane.purposeZh || lane.entryPolicyZh || '仅按当前新鲜守门证据判断。'
-                : `历史车道证据：${lane.laneZh || humanizeStatus(lane.lane || lane.role)}；当前不可用于入场判断。`,
+                ? '旧 lane 字段只用于账户分组与研究对照；当前没有 execution lane。'
+                : `历史车道字段：${lane.laneZh || humanizeStatus(lane.lane || lane.role)}；当前只作兼容证据。`,
             },
             {
-              label: '允许信号模式',
+              label: '研究信号模式',
               value: currentStateTrusted
                 ? Array.isArray(lane.allowedEntryModes)
                   ? lane.allowedEntryModes.join(' / ')
@@ -1296,7 +1317,7 @@ function accountCard(account = {}, fallback = {}) {
                 : '不可用 / 已阻断',
               status: currentStateTrusted ? (isUsdLane ? 'warn' : 'ok') : 'blocked',
               hint: currentStateTrusted
-                ? '只有后端当前守门明确通过的入场模式才可复核。'
+                ? '这些模式只用于 Shadow / tester 复核，不能触发 broker order。'
                 : `历史允许模式：${Array.isArray(lane.allowedEntryModes) ? lane.allowedEntryModes.join(' / ') : format(lane.allowedEntryModes || '未返回')}；当前只作研究证据。`,
             },
           ]
@@ -1304,16 +1325,16 @@ function accountCard(account = {}, fallback = {}) {
       ...(isUsdLane && usdDeploymentGate
         ? [
             {
-              label: 'USD 部署门',
+              label: 'USD Shadow 对照门',
               value: currentStateTrusted
-                ? `${humanizeStatus(usdDeploymentGate.action || 'PAPER_MIRROR')} / ${humanizeStatus(
-                    usdDeploymentGate.targetStage || 'USD_PAPER_MIRROR',
-                  )}`
+                ? usdDeploymentGate.liveAllowed
+                  ? '旧 liveAllowed=true（已退役 / 不生效）'
+                  : 'Shadow / PAPER_MIRROR'
                 : '不可用 / 已阻断',
-              status: currentStateTrusted ? (usdDeploymentGate.liveAllowed ? 'ok' : 'warn') : 'blocked',
+              status: currentStateTrusted ? (usdDeploymentGate.liveAllowed ? 'warn' : 'ok') : 'blocked',
               hint: currentStateTrusted
-                ? usdDeploymentGate.reasonZh || '外汇部署只以后端当前守门证据为准。'
-                : '旧部署门只作历史明细；恢复新鲜快照前不得用于当前容量或入场判断。',
+                ? `旧部署字段只作历史兼容；${usdDeploymentGate.reasonZh || '当前保持 Shadow / ReadOnly。'} 不构成执行授权。`
+                : '旧部署门只作历史明细；恢复新鲜快照后也只能用于 Shadow / ReadOnly 观察。',
             },
           ]
         : []),
@@ -1732,7 +1753,7 @@ function routeEnabled(snapshot, key) {
 function routeMode(snapshot, key) {
   const route = snapshot.strategies?.[key] || {};
   if (!routeEnabled(snapshot, key)) return '未运行';
-  if (Number(route.riskMultiplier || 0) > 0) return '受限执行证据（只读）';
+  if (Number(route.riskMultiplier || 0) > 0) return '影子建议候选（只读）';
   if (
     route.candidate ||
     route.simulation ||
@@ -1932,7 +1953,7 @@ function accountRecoveryRow(account = {}) {
         account.hostProcessLine || '未检测到 terminal64/wine 进程',
         freshnessRecoveryHint(
           freshness,
-          '恢复对应 terminal64/wine 与 EA dashboard writer，再判断账号、持仓和交易权限。',
+          '恢复对应 terminal64/wine 与 EA dashboard writer，再判断账号、持仓和只读观察状态。',
         ),
       ]
         .filter(Boolean)
@@ -2033,13 +2054,11 @@ export function buildSafetyItems(snapshot) {
       status: boolLike(snapshot.readOnly, 'ok', 'warn'),
     },
     {
-      label: '后端权限证据',
+      label: '执行边界',
       value: currentEvidenceTrusted
-        ? snapshot.eaTradeReady
-          ? '条件齐全（前端只读）'
-          : snapshot.marketSession === 'MARKET_CLOSED'
-            ? 'MARKET_CLOSED'
-            : 'Shadow / ReadOnly（不执行）'
+        ? snapshot.marketSession === 'MARKET_CLOSED'
+          ? 'MARKET_CLOSED / Shadow 观察'
+          : 'Shadow / ReadOnly（无执行通道）'
         : '不可用 / 已阻断',
       status: currentEvidenceTrusted ? 'warn' : 'blocked',
     },
@@ -2144,9 +2163,9 @@ export function buildMt5SimulationItems(snapshot) {
 
   return [
     {
-      label: '执行守门 Universe（只读）',
+      label: 'EA Shadow 观察 Universe',
       value: liveUniverse,
-      hint: '只展示 EA 执行守门所覆盖的品种，不代表执行授权。',
+      hint: '只展示 EA Shadow 观察所覆盖的品种；当前没有执行通道。',
     },
     {
       label: '当前策略证据',
@@ -2165,7 +2184,7 @@ export function buildMt5SimulationItems(snapshot) {
     {
       label: '模拟Universe',
       value: shadowUniverse,
-      hint: 'Shadow / candidate / GA 只研究，不会自动获得执行授权。',
+      hint: 'Shadow / candidate / GA 只研究，不能直接或间接创建执行通道。',
     },
     {
       label: '模拟规模',
@@ -2426,7 +2445,7 @@ export function buildMt5RouteModeRows(snapshot) {
     return {
       路线: key,
       当前位置: routeMode(snapshot, key),
-      执行候选: Number(route.riskMultiplier || 0) > 0 ? '是（仍只读）' : '否',
+      影子候选: Number(route.riskMultiplier || 0) > 0 ? '是（只读建议）' : '否',
       说明: humanizeStatus(route.reason || route.state || route.blocker || '等待信号'),
     };
   });
@@ -2438,7 +2457,7 @@ export function buildUsdJpyLiveLoopItems(snapshot) {
   if (snapshot.marketSession === 'MARKET_CLOSED') {
     return [
       {
-        label: 'USDJPY Live Loop',
+        label: 'USDJPY Shadow Advisory',
         value: 'MARKET_CLOSED / 外汇休市',
         status: 'warn',
         hint: 'Writer 可继续刷新，但休市报价静止；不据此判断账号掉线。',
@@ -2453,7 +2472,7 @@ export function buildUsdJpyLiveLoopItems(snapshot) {
         label: '建议策略仓位',
         value: 'MARKET_CLOSED / 不评估',
         status: 'blocked',
-        hint: '休市期间不展示可执行仓位。',
+        hint: '休市期间不生成新的影子仓位建议。',
       },
       {
         label: '当前守门',
@@ -2462,7 +2481,7 @@ export function buildUsdJpyLiveLoopItems(snapshot) {
         hint: '这是市场时段状态，不是点差硬阻断，也不是账号连接失败。',
       },
       {
-        label: 'EA 干跑状态',
+        label: '影子观察状态',
         value: '休市待新报价',
         status: 'warn',
         hint: 'Shadow / ReadOnly；不会触发执行。',
@@ -2471,14 +2490,18 @@ export function buildUsdJpyLiveLoopItems(snapshot) {
         label: '影子第一名',
         value: '保留历史研究证据',
         status: 'warn',
-        hint: '休市期间不产生新的执行结论。',
+        hint: '休市期间不产生新的影子建议结论。',
       },
     ];
   }
   const topLive = firstNonEmptyObject(
+    status.topAdvisoryPolicy,
+    status.topShadowPolicy,
     status.topLiveEligiblePolicy,
     status.topPolicy,
     status.liveRecoveryCandidate,
+    status.policy?.topAdvisoryPolicy,
+    status.policy?.topShadowPolicy,
     status.policy?.topLiveEligiblePolicy,
     status.policy?.topPolicy,
     status.policy?.liveRecoveryCandidate,
@@ -2488,6 +2511,8 @@ export function buildUsdJpyLiveLoopItems(snapshot) {
   const blockers = rowsFromPayload(status.blockers || status.primaryBlockers || status.mainBlockers);
   const reasons = reasonTextsFrom(
     topLive.reasons,
+    status.topAdvisoryPolicy?.reasons,
+    status.topShadowPolicy?.reasons,
     status.topPolicy?.reasons,
     status.liveRecoveryCandidate?.reasons,
     status.policy?.topPolicy?.reasons,
@@ -2497,10 +2522,10 @@ export function buildUsdJpyLiveLoopItems(snapshot) {
     status.nextActions,
   );
   const state = status.state || status.status || status.overallState || '等待同步';
-  const stateZh = status.stateZh || status.conclusionZh || humanizeStatus(state);
+  const stateZh = liveLoopStateLabel(state, status.stateZh || status.conclusionZh);
   const stateUpper = String(state || '').toUpperCase();
-  const isReadyState = ['READY_FOR_EXISTING_EA', 'READY', 'POLICY_READY'].includes(stateUpper);
-  const hasLivePolicy = Boolean(topLive.strategy && topLive.entryMode && topLive.entryMode !== 'BLOCKED');
+  const isReadyState = liveLoopAdvisoryReady(stateUpper, status);
+  const hasAdvisoryPolicy = Boolean(topLive.strategy && topLive.entryMode && topLive.entryMode !== 'BLOCKED');
   const shouldSurfaceReasons = !isReadyState || status.policyReady === false || topLive.allowed === false;
   const blockerTexts = blockers.map(reasonText).filter(Boolean);
   const hardBlockerTexts = blockerTexts.filter(isBlockingReason);
@@ -2513,6 +2538,8 @@ export function buildUsdJpyLiveLoopItems(snapshot) {
   const maxLot = topLive.maxLot ?? status.maxLot ?? status.autoMaxLot;
   const newsBlocker = newsGateBlockerText(
     topLive.newsGate,
+    status.topAdvisoryPolicy?.newsGate,
+    status.topShadowPolicy?.newsGate,
     status.topPolicy?.newsGate,
     status.liveRecoveryCandidate?.newsGate,
     status.policy?.topPolicy?.newsGate,
@@ -2533,28 +2560,33 @@ export function buildUsdJpyLiveLoopItems(snapshot) {
       derivedBlockerText ||
       explicitBlockerTexts.find(Boolean) ||
       (blockerTexts.length ? blockerTexts.slice(0, 2).join('；') : '') ||
-      '无；等待 MT5 EA 自身 RSI、时段、点差、新闻和仓位风控评估';
+      '无；等待新鲜行情与策略条件生成影子观察/建议，系统不会执行交易';
   const reasonSummary = newsBlocker
     ? newsBlocker
     : blockingReasons.length
       ? blockingReasons.slice(0, 2).join('；')
       : reasons.length
         ? reasons.slice(0, 2).join('；')
-        : topLive.reason || status.summary || '页面、Telegram 和 EA 干跑统一读取 USDJPY Live Loop。';
+        : topLive.reason ||
+          status.summary ||
+          '页面、Telegram 和 EA 影子观察统一读取 Shadow Advisory（兼容 Live Loop）；不会触发交易。';
   const dryRunDecision = dryRun.decisionZh || dryRun.decision || status.dryRunStateZh;
   const currentEvidenceTrusted = mt5CurrentEvidenceTrusted(snapshot);
 
   return [
     {
-      label: 'USDJPY Live Loop',
+      label: 'USDJPY Shadow Advisory',
       value: stateZh,
-      status: liveLoopStatusTone(state),
-      hint: status.singleSourceOfTruth || 'USDJPY_LIVE_LOOP',
+      status: liveLoopStatusTone(state, status),
+      hint:
+        status.advisoryRouteZh ||
+        status.singleSourceOfTruth ||
+        'Shadow advisory only；executionLaneExists=false。',
     },
     {
       label: 'Shadow 候选策略',
       value: currentEvidenceTrusted ? `${liveStrategy}｜${liveDirection}｜${entryMode}` : '不可用 / 已阻断',
-      status: currentEvidenceTrusted ? (hasLivePolicy ? 'ok' : 'warn') : 'blocked',
+      status: currentEvidenceTrusted ? (hasAdvisoryPolicy ? 'ok' : 'warn') : 'blocked',
       hint: currentEvidenceTrusted
         ? reasonSummary
         : `历史策略证据：${liveStrategy}｜${liveDirection}｜${entryMode}；原因：${reasonSummary}；当前账号快照不可用。`,
@@ -2576,22 +2608,22 @@ export function buildUsdJpyLiveLoopItems(snapshot) {
       hint: '无阻断只代表策略证据通过，不代表执行授权。',
     },
     {
-      label: 'EA 干跑状态',
-      value: dryRunDecision || '等待 EA 干跑同步',
+      label: '影子观察状态',
+      value: dryRunDecision || '等待 EA 影子观察同步',
       status: dryRunDecisionTone(dryRunDecision),
       hint:
         dryRun.reason ||
         dryRun.summary ||
         (Array.isArray(dryRun.reasons) && dryRun.reasons.length
           ? dryRun.reasons.slice(0, 2).join('；')
-          : '用于确认 EA 看到的政策，不由前端下单。'),
+          : '仅记录 EA 看到的影子政策与建议，不会向 broker 发送 mutation。'),
     },
     {
       label: '影子第一名',
       value: topShadow.strategy
         ? `${topShadow.strategy}｜${directionZh(topShadow.direction)}｜${entryModeZh(topShadow.entryMode)}`
         : '暂无影子第一名',
-      hint: '影子第一名只做研究，不会触发 RSI_Reversal 执行。',
+      hint: '影子第一名只做研究，不会触发任何 broker 执行。',
     },
   ];
 }
@@ -2638,7 +2670,7 @@ export function buildMt5EvidenceOsLiteItems(snapshot) {
     promotionGate.reasonZh ||
     promotionGate.reason ||
     executionFeedback.reasonZh ||
-    '等待 EA 输出标准化 LiveExecutionFeedback，或等待 Evidence OS 刷新。';
+    '等待 EA Shadow 评估、历史兼容反馈，或等待 Evidence OS 刷新。';
   const blockerText = blockers.length
     ? blockers
         .slice(0, 2)
@@ -2649,7 +2681,7 @@ export function buildMt5EvidenceOsLiteItems(snapshot) {
           .slice(0, 2)
           .map((row) => row.reasonZh || row.reason || row.code || row.label || humanizeStatus(row))
           .join('；')
-      : '未发现执行反馈阻断晋级。';
+      : '未发现影子 / 历史反馈证据阻断。';
   const caseLabel =
     topCase.caseId ||
     topCase.id ||
@@ -2661,7 +2693,7 @@ export function buildMt5EvidenceOsLiteItems(snapshot) {
     topCase.rootCause ||
     topCase.reason ||
     caseMemoryToGA.nextActionZh ||
-    '等待 Case Memory 把执行异常转成下一代 GA seed hint。';
+    '等待 Case Memory 把影子或历史反馈异常转成下一代 GA seed hint。';
   const hintCount = caseMemoryToGA.queuedHintCount ?? caseMemoryToGA.queuedForGA ?? gaSeedHints.length;
   const nextFix = mutationHintZh(topHint);
   const parityStatus = deepParity.status || parity.status || 'MISSING';
@@ -2696,7 +2728,7 @@ export function buildMt5EvidenceOsLiteItems(snapshot) {
       hint: parityHint,
     },
     {
-      label: '执行反馈晋级门',
+      label: '影子 / 历史反馈可信度门',
       value: executionGateZh(gateStatus),
       status: evidenceGateTone(gateStatus),
       hint: gateReason,
@@ -2712,7 +2744,7 @@ export function buildMt5EvidenceOsLiteItems(snapshot) {
         } 条；等待 EA 同步 policyId / intentId / fill / slippage / latency / R 倍数字段。`,
     },
     {
-      label: '执行阻断 / 警告',
+      label: '反馈阻断 / 警告',
       value: blockerText,
       status: blockers.length ? 'error' : warnings.length ? 'warn' : 'ok',
       hint: `拒单 ${executionMetrics.rejectCount ?? 0}；滑点 ${formatDiagnosticNumber(
@@ -2758,7 +2790,7 @@ export function buildMt5ExecutionFeedbackRows(snapshot) {
         profitR: '—',
         mfeR: '—',
         maeR: '—',
-        结论: executionFeedback?.promotionGate?.reasonZh || '等待标准化 LiveExecutionFeedback。',
+        结论: executionFeedback?.promotionGate?.reasonZh || '等待 Shadow 评估或历史兼容反馈。',
       },
     ];
   }
@@ -2779,7 +2811,7 @@ export function buildMt5ExecutionFeedbackRows(snapshot) {
       ? `拒单：${humanizeStatus(row.rejectReason)}`
       : row.exitReason
         ? `退出：${humanizeStatus(row.exitReason)}`
-        : '执行链路已记录',
+        : '历史 / 模拟反馈已记录',
   }));
 }
 
@@ -2895,16 +2927,16 @@ export function buildRsiEntryDiagnosticRows(snapshot) {
     newsGate.reasonZh ||
     guards.newsReason ||
     (newsRiskLevel === 'HARD'
-      ? '高冲击事件窗口内暂停 live，shadow / replay 继续。'
-      : '普通新闻不阻断 USDJPY RSI 买入，只做仓位降档和日报记录。');
+      ? '高冲击事件窗口内暂停影子候选晋级，shadow / replay 继续。'
+      : '普通新闻只影响影子建议风险档位与日报记录，不会触发交易。');
   const buyConditionText = `${passText(rsi.buyReversal)} / ${passText(rsi.buyBand)}`;
   const sessionWindowText = String(guards.sessionWindowUtc || '').trim();
   const sessionIsAlwaysOpen =
     !sessionWindowText ||
     ['全天', '24h', '24H', '0-23', '0-24', '00-23', '00-24'].includes(sessionWindowText);
   const sessionDetail = sessionIsAlwaysOpen
-    ? '全天评估新入场；仍受新闻、点差、快通道、冷却、启动保护、仓位容量和亏损熔断约束。'
-    : `允许 ${sessionWindowText}，EA 只在该窗口内评估新入场。`;
+    ? '全天评估影子候选；仍受新闻、点差、快通道、冷却、启动保护和研究风控约束。'
+    : `允许 ${sessionWindowText}，EA 只在该窗口内生成影子观察与建议。`;
   const buyConditionDetail = `RSI ${formatDiagnosticNumber(rsi.rsiClosed2)} → ${formatDiagnosticNumber(
     rsi.rsiClosed1,
   )}，布林下轨 ${formatDiagnosticNumber(rsi.lowerBand, 3)}，买入分 ${formatDiagnosticNumber(
@@ -2915,7 +2947,7 @@ export function buildRsiEntryDiagnosticRows(snapshot) {
     {
       项目: '当前结论',
       结论: diagnostics.stateZh || humanizeStatus(diagnostics.state),
-      说明: diagnostics.summary || '等待 EA 自身信号。',
+      说明: diagnostics.summary || '等待 EA 生成影子观察或建议信号；系统不会执行交易。',
     },
     {
       项目: 'RSI 买入条件',
@@ -2923,11 +2955,11 @@ export function buildRsiEntryDiagnosticRows(snapshot) {
       说明: buyConditionDetail,
     },
     {
-      项目: '交易权限',
-      结论: permissionReady ? '通过' : '未通过',
+      项目: '执行边界',
+      结论: 'Shadow / ReadOnly（无执行通道）',
       说明: permissions.blocker
-        ? humanizeStatus(permissions.blocker)
-        : 'MT5 终端、账户、EA 和品种权限均未报告阻断。',
+        ? `${humanizeStatus(permissions.blocker)}；该字段只作诊断，系统仍不会执行交易。`
+        : `旧权限字段已观测：${permissionReady ? '齐全' : '不齐全'}；不构成 broker 执行授权。`,
     },
     {
       项目: '交易时段',
@@ -2997,8 +3029,8 @@ export function buildMt5AccountCards(snapshot) {
   const cards = [
     accountCard(snapshot.primaryConnection || snapshot, {
       role: 'primary',
-      eyebrow: 'Cent Lane',
-      title: centLane.laneZh || '美分账户学习',
+      eyebrow: 'Cent Shadow Profile',
+      title: '美分账户 Shadow 观察',
       lane: centLane,
       spreadGate: snapshot.spreadGate,
       latestFreshness: snapshot.latestFreshness,
@@ -3009,8 +3041,8 @@ export function buildMt5AccountCards(snapshot) {
     cards.push(
       accountCard(snapshot.secondaryConnection || {}, {
         role: 'secondary',
-        eyebrow: 'USD Lane',
-        title: usdLane.laneZh || '美元账户部署',
+        eyebrow: 'USD ReadOnly Profile',
+        title: '美元账户 ReadOnly 观察',
         lane: usdLane,
         spreadGate: snapshot.spreadGate,
         usdDeploymentGate: snapshot.usdDeploymentGate,

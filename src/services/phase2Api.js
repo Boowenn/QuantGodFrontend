@@ -5,7 +5,7 @@ export const PHASE2_ENDPOINTS = Object.freeze({
   governance: [
     ['/api/governance/advisor', '治理建议'],
     ['/api/governance/version-registry', '策略版本登记'],
-    ['/api/governance/promotion-gate', '升实盘闸门'],
+    ['/api/governance/promotion-gate', 'Shadow 研究晋级闸门'],
     ['/api/governance/optimizer-v2', '优化器结果'],
   ],
   paramlab: [

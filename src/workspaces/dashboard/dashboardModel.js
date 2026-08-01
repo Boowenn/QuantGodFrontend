@@ -64,6 +64,7 @@ function dashboardStatusCandidate(value = {}) {
 function dashboardStatusTone(status) {
   const text = String(status || '').toUpperCase();
   if (!text) return '';
+  if (text === 'SHADOW_ADVISORY_READY' || text === 'READY_FOR_EXISTING_EA') return 'warn';
   if (
     /(?:^|_)(?:BLOCKED|ERROR|FAIL(?:ED)?|STALE|MISSING|UNAVAILABLE|UNKNOWN|NOT_READY|NOT_RUN)(?:_|$)/.test(
       text,
@@ -78,6 +79,13 @@ function dashboardStatusTone(status) {
     return 'ok';
   }
   return '';
+}
+
+function dashboardStatusLabel(code, label) {
+  const text = String(code || '').toUpperCase();
+  if (text === 'SHADOW_ADVISORY_READY') return '影子建议已就绪';
+  if (text === 'READY_FOR_EXISTING_EA') return '影子建议已就绪（旧契约）';
+  return label;
 }
 
 function transportSucceeded(value) {
@@ -105,10 +113,12 @@ export function resolveDashboardEvidenceState(value) {
     transportOk: true,
     domainOk: status === 'ok' && value.ok !== false,
     code: candidate.code,
-    label:
+    label: dashboardStatusLabel(
+      candidate.code,
       candidate.label ||
-      value.statusZh ||
-      (value.ok === false ? value.error?.message || value.error || '业务状态已阻断' : '正常'),
+        value.statusZh ||
+        (value.ok === false ? value.error?.message || value.error || '业务状态已阻断' : '正常'),
+    ),
     status,
   };
 }
@@ -467,10 +477,10 @@ export function buildOperatorOverviewItems(snapshot = {}) {
       passLabel: '只读监控就绪',
       failLabel: '只读监控未就绪',
     }),
-    booleanOverviewItem('交易执行就绪', mt5.tradingReady, {
+    booleanOverviewItem('执行通道锁', mt5.tradingReady, {
       expected: false,
-      passLabel: 'false · Shadow / ReadOnly',
-      failLabel: '异常：出现执行就绪',
+      passLabel: '已锁定 · Shadow / ReadOnly',
+      failLabel: '异常：检测到执行能力',
       passStatus: 'warn',
       hint: '当前系统没有发单执行通道；false 是安全边界，不是故障。',
     }),
@@ -525,7 +535,7 @@ const OPERATOR_OVERVIEW_AXIS_LABELS = new Set([
   '账号授权',
   '报价新鲜度',
   'MT5 监控就绪',
-  '交易执行就绪',
+  '执行通道锁',
 ]);
 
 export function buildOperatorOverviewAxisItems(snapshot = {}) {
@@ -626,7 +636,7 @@ export function buildDashboardMetrics(snapshot = {}) {
         ]
       : []),
     {
-      label: 'USDJPY Live Loop',
+      label: 'USDJPY Shadow Advisory',
       value: liveLoopPresent ? liveLoopEvidence.label || '未知 / 已阻断' : '诊断明细加载中',
       status: liveLoopPresent ? liveLoopEvidence.status : 'warn',
       hint: '策略诊断明细不覆盖 Operator Overview 的核心运营结论。',
@@ -651,7 +661,7 @@ export function buildEndpointHealth(raw = {}) {
           ],
         ]
       : []),
-    ['USDJPY Live Loop', '/api/usdjpy-strategy-lab/live-loop', raw.usdJpyLiveLoop, null],
+    ['USDJPY Shadow Advisory', '/api/usdjpy-strategy-lab/live-loop', raw.usdJpyLiveLoop, null],
     ['生产证据', '/api/production-evidence-validation/status', raw.productionEvidenceValidation, null],
   ].map(([label, endpoint, payload, freshness]) => {
     const evidence =

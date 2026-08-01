@@ -178,7 +178,7 @@ describe('Forex-only dashboard model', () => {
 
     expect(snapshot.snapshotRecovery).toMatchObject({ status: 'blocked' });
     expect(
-      buildDashboardMetrics(snapshot).find((item) => item.label === 'USDJPY Live Loop')?.status,
+      buildDashboardMetrics(snapshot).find((item) => item.label === 'USDJPY Shadow Advisory')?.status,
     ).not.toBe('ok');
     expect(buildEndpointHealth(snapshot.raw).every((item) => item.status === 'blocked')).toBe(true);
   });
@@ -195,6 +195,29 @@ describe('Forex-only dashboard model', () => {
     expect(endpointRows.find((item) => item.endpoint === '/api/usdjpy-strategy-lab/live-loop')?.status).toBe(
       'blocked',
     );
+  });
+
+  it('downgrades new and legacy live-loop ready states to Shadow advisory warnings', () => {
+    const current = resolveDashboardEvidenceState({
+      ok: true,
+      state: 'SHADOW_ADVISORY_READY',
+      stateZh: 'Shadow advisory 已就绪，可继续观察与复核',
+      _api: { ok: true },
+    });
+    const legacy = resolveDashboardEvidenceState({
+      ok: true,
+      state: 'READY_FOR_EXISTING_EA',
+      stateZh: 'RSI 买入路线已恢复，等待 EA 自身信号',
+      _api: { ok: true },
+    });
+
+    expect(current).toMatchObject({ status: 'warn', domainOk: false, label: '影子建议已就绪' });
+    expect(legacy).toMatchObject({
+      status: 'warn',
+      domainOk: false,
+      label: '影子建议已就绪（旧契约）',
+    });
+    expect(legacy.label).not.toContain('等待 EA 自身信号');
   });
 
   it('prioritizes overall BLOCKED over system WARN while preserving returned Agent checks', () => {
@@ -292,8 +315,8 @@ describe('Forex-only dashboard model', () => {
       value: 'MARKET_CLOSED',
       status: 'warn',
     });
-    expect(items.find((item) => item.label === '交易执行就绪')).toMatchObject({
-      value: 'false · Shadow / ReadOnly',
+    expect(items.find((item) => item.label === '执行通道锁')).toMatchObject({
+      value: '已锁定 · Shadow / ReadOnly',
       status: 'warn',
     });
     expect(buildOperatorOverviewBlockerRows(snapshot)).toHaveLength(2);

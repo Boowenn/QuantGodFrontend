@@ -273,7 +273,7 @@
         <JsonPreview title="回测摘要" source="/api/dashboard/backtest-summary" :payload="state.backtest" />
         <JsonPreview title="每日复盘" source="/api/daily-review" :payload="state.dailyReview" />
         <JsonPreview
-          title="USDJPY Live Loop"
+          title="USDJPY Shadow Advisory（兼容 Live Loop）"
           source="/api/usdjpy-strategy-lab/live-loop"
           :payload="state.usdJpyLiveLoop"
         />
@@ -304,27 +304,27 @@
           :payload="state.secondaryMt5Snapshot"
         />
         <JsonPreview
-          title="外币 Live12 执行交接证据（只读）"
+          title="外币 Live12 历史交接字段（已退役 / 只读）"
           source="/api/live-automation/forex-live12-runtime-handoff?scope=secondary"
           :payload="state.forexLive12RuntimeHandoff"
         />
         <JsonPreview
-          title="外币 Live12 扩仓评审"
+          title="外币 Live12 历史扩仓评审（已退役 / 只读）"
           source="/api/live-automation/forex-live12-capacity-expansion-review?scope=secondary"
           :payload="state.forexLive12CapacityExpansionReview"
         />
         <JsonPreview
-          title="外币 Live12 扩仓路线"
+          title="外币 Live12 历史扩仓路线（已退役 / 只读）"
           source="/api/live-automation/forex-live12-capacity-expansion-roadmap?scope=secondary"
           :payload="state.forexLive12CapacityExpansionRoadmap"
         />
         <JsonPreview
-          title="外币 Live12 2→3 微仓评审"
+          title="外币 Live12 历史微仓评审（已退役 / 只读）"
           source="/api/live-automation/forex-live12-micro-expansion-review?scope=secondary"
           :payload="state.forexLive12MicroExpansionReview"
         />
         <JsonPreview
-          title="外币 Live12 RSI 修复计划"
+          title="外币 Live12 RSI Shadow 修复计划"
           source="/api/live-automation/forex-live12-rsi-repair-plan?scope=secondary"
           :payload="state.forexLive12RsiRepairPlan"
         />
@@ -344,7 +344,7 @@
           :payload="state.forexLive12RsiTesterRunGate"
         />
         <JsonPreview
-          title="外币 Live12 RSI 候选晋级闸门"
+          title="外币 Live12 RSI Shadow 研究晋级闸门"
           source="/api/live-automation/forex-live12-rsi-candidate-promotion-gate?scope=secondary"
           :payload="state.forexLive12RsiCandidatePromotionGate"
         />

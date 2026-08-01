@@ -5,7 +5,7 @@
         <p class="qg-automation-chain-panel__eyebrow">USDJPY Shadow / ReadOnly</p>
         <h2>USDJPY 只读守门证据</h2>
         <p class="qg-automation-chain-panel__subtitle">
-          读取 USDJPY 策略政策与 EA 干跑证据；这里只做复核，不代表允许自动执行。
+          读取 USDJPY 策略政策与 EA 影子观察证据；这里只生成建议，不存在自动执行通道。
         </p>
       </div>
       <div class="qg-automation-chain-panel__actions">
@@ -33,7 +33,7 @@
       <div class="qg-automation-chain-panel__summary">
         <div>
           <span>结论</span>
-          <strong :class="stateClass">{{ payload.stateZh || payload.state || '未知' }}</strong>
+          <strong :class="stateClass">{{ advisoryStateLabel }}</strong>
         </div>
         <div>
           <span>标准信号</span>
@@ -57,7 +57,7 @@
         <article>
           <span>主状态来源</span>
           <strong>{{ payload.singleSourceOfTruth || 'USDJPY_LIVE_LOOP' }}</strong>
-          <small>页面、Telegram 和 EA 干跑统一读取 USDJPY Live Loop</small>
+          <small>页面、Telegram 和 EA 影子观察统一读取 Shadow Advisory（兼容 Live Loop）</small>
         </article>
         <article>
           <span>Shadow 候选</span>
@@ -70,9 +70,9 @@
           <small>影子研究只用于观察，不会触发执行</small>
         </article>
         <article>
-          <span>EA 干跑</span>
+          <span>EA 影子观察</span>
           <strong>{{ dryRunLabel }}</strong>
-          <small>干跑只验证政策读取，不代表执行授权</small>
+          <small>只验证政策读取并生成建议，不会触发 broker mutation</small>
         </article>
         <article>
           <span>信号延迟</span>
@@ -190,8 +190,15 @@ const steps = computed(() => payload.value.steps || []);
 const missingEvidence = computed(() => payload.value.missingEvidence || []);
 const blockedReasons = computed(() => payload.value.blockedReasons || []);
 const opportunities = computed(() => payload.value.policySummary?.opportunities || []);
-const topLive = computed(
-  () => payload.value.topLiveEligiblePolicy || payload.value.liveLoopStatus?.topLiveEligiblePolicy || {},
+const topAdvisory = computed(
+  () =>
+    payload.value.topAdvisoryPolicy ||
+    payload.value.topShadowPolicy ||
+    payload.value.liveLoopStatus?.topAdvisoryPolicy ||
+    payload.value.liveLoopStatus?.topShadowPolicy ||
+    payload.value.topLiveEligiblePolicy ||
+    payload.value.liveLoopStatus?.topLiveEligiblePolicy ||
+    {},
 );
 const topShadow = computed(
   () => payload.value.topShadowPolicy || payload.value.liveLoopStatus?.topShadowPolicy || {},
@@ -260,7 +267,7 @@ const gaFactoryMeta = computed(() => {
   return `第 ${generation} 代｜${stage}${nextGen}`;
 });
 const livePolicyLabel = computed(() => {
-  const item = topLive.value || {};
+  const item = topAdvisory.value || {};
   if (!item.strategy) return '暂无 Shadow 候选';
   return `${item.strategy}｜${directionZh(item.direction)}｜${entryModeZh(item.entryMode)}`;
 });
@@ -271,7 +278,7 @@ const shadowPolicyLabel = computed(() => {
 });
 const dryRunLabel = computed(() => {
   const item = dryRun.value || {};
-  return item.decision || '暂无干跑结果';
+  return item.decision || '暂无影子观察结果';
 });
 const entryLatencyLabel = computed(
   () => entryLatencySummary.value.stateZh || entryLatencySummary.value.primaryStage || '暂无归因',
@@ -284,6 +291,12 @@ const stateClass = computed(() => {
   if (state.includes('READY')) return 'warn';
   if (state.includes('BLOCKED')) return 'bad';
   return 'warn';
+});
+const advisoryStateLabel = computed(() => {
+  const state = String(payload.value.state || '').toUpperCase();
+  if (state === 'SHADOW_ADVISORY_READY') return '影子建议已就绪';
+  if (state === 'READY_FOR_EXISTING_EA') return '影子建议已就绪（旧契约）';
+  return payload.value.stateZh || payload.value.state || '未知';
 });
 
 function unwrap(response) {
@@ -374,7 +387,11 @@ async function loadStatus({ silent = false } = {}) {
   loading.value = true;
   error.value = '';
   if (!silent)
-    setActionStatus('running', 'Agent 正在刷新恢复证据', '正在读取 USDJPY Live Loop、EA 干跑和技术链路。');
+    setActionStatus(
+      'running',
+      'Agent 正在刷新恢复证据',
+      '正在读取 USDJPY Shadow Advisory、EA 影子观察和技术链路。',
+    );
   try {
     payload.value = unwrap(await fetchAutomationChainStatus());
     if (!silent) setActionStatus('success', 'Agent 证据已刷新', statusSummary());

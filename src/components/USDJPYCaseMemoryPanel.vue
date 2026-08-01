@@ -29,7 +29,7 @@
       <article>
         <span>GA seed</span>
         <strong>{{ gaSeedCount }} 条</strong>
-        <p>所有候选保持 shadow，只进遗传进化种子池，不下单、不改 live preset。</p>
+        <p>所有候选保持 Shadow，只进遗传进化种子池，不下单、不改 preset，也不创建 execution lane。</p>
       </article>
       <article>
         <span>样本类型晋级门</span>
@@ -145,7 +145,7 @@
 
     <p class="qg-usdjpy-evolution__note">
       这个面板只展示 Case Memory 到 Strategy JSON candidate 的转换结果；PARITY_FAIL 会阻断候选进入 shadow / GA
-      elite / MICRO_LIVE。
+      elite。旧 MICRO_LIVE 字段已退役，不能创建 execution lane。
     </p>
   </section>
 </template>

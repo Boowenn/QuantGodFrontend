@@ -123,13 +123,13 @@
     <details class="qg-mt5-progressive">
       <summary>
         <span>策略守门与图表</span>
-        <small>按需查看策略诊断、执行反馈与 K 线</small>
+        <small>按需查看策略诊断、影子反馈与 K 线</small>
       </summary>
       <div class="qg-mt5-progressive__content">
         <section class="qg-section-card qg-section-card--operator">
           <header>
-            <p class="qg-eyebrow">USDJPY Live Loop</p>
-            <h2>USDJPY Shadow / ReadOnly 守门状态</h2>
+            <p class="qg-eyebrow">USDJPY Shadow Advisory（兼容 Live Loop）</p>
+            <h2>USDJPY 影子建议与只读证据</h2>
           </header>
           <KeyValueList :items="usdJpyLiveLoopItems" />
         </section>
@@ -137,20 +137,20 @@
         <section class="qg-section-card qg-section-card--operator">
           <header>
             <p class="qg-eyebrow">Evidence OS</p>
-            <h2>执行反馈与下一代修复</h2>
+            <h2>影子结果反馈与下一代修复</h2>
           </header>
           <KeyValueList :items="evidenceOsLiteItems" />
         </section>
 
         <LedgerTable
-          title="Live Execution Feedback"
+          title="历史 / Shadow Feedback（只读）"
           :rows="executionFeedbackRows"
           :limit="20"
           class="qg-ledger-table--important qg-ledger-table--mt5-full"
         />
 
         <LedgerTable
-          title="RSI 入场诊断"
+          title="RSI 影子条件诊断"
           :rows="rsiEntryDiagnosticRows"
           :limit="14"
           class="qg-ledger-table--important qg-ledger-table--mt5-full"

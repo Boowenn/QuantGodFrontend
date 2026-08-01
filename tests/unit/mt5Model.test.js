@@ -155,8 +155,8 @@ describe('mt5Model ledgers', () => {
       statusLabel: 'Shadow / 只读观察',
     });
     expect(buildMt5PrimaryAxisItems(snapshot)).toHaveLength(6);
-    expect(buildMt5PrimaryAxisItems(snapshot).find((item) => item.label === '交易准备度')).toMatchObject({
-      value: 'Shadow / ReadOnly（不执行）',
+    expect(buildMt5PrimaryAxisItems(snapshot).find((item) => item.label === '影子观察状态')).toMatchObject({
+      value: 'Shadow / ReadOnly（无执行通道）',
       status: 'warn',
     });
     expect(buildMt5CoreMetrics(snapshot).map((item) => item.label)).toEqual(['余额', '净值', '持仓', '挂单']);
@@ -275,7 +275,9 @@ describe('mt5Model ledgers', () => {
     expect(snapshot.dualAccountAutoEnabled).toBe(false);
     expect(snapshot.dualAccountEntryReady).toBe(false);
     expect(snapshot.eaTradeReady).toBe(false);
-    expect(buildMt5AccountCards(snapshot)[0].items.find((item) => item.label === 'MT5 权限')).toMatchObject({
+    expect(
+      buildMt5AccountCards(snapshot)[0].items.find((item) => item.label === 'MT5 权限证据'),
+    ).toMatchObject({
       value: '证据不完整 / 已阻断',
       status: 'blocked',
     });
@@ -330,13 +332,15 @@ describe('mt5Model ledgers', () => {
     expect(ready.dualAccountAutoEnabled).toBe(true);
     expect(ready.dualAccountEntryReady).toBe(true);
     expect(ready.eaTradeReady).toBe(true);
-    expect(buildMt5AccountCards(ready)[0].items.find((item) => item.label === 'MT5 权限')).toMatchObject({
-      value: '全部通过',
+    expect(buildMt5AccountCards(ready)[0].items.find((item) => item.label === 'MT5 权限证据')).toMatchObject({
+      value: '已观测（不构成执行授权）',
       status: 'ok',
     });
     expect(blocked.dualAccountAutoEnabled).toBe(false);
-    expect(buildMt5AccountCards(blocked)[0].items.find((item) => item.label === 'MT5 权限')).toMatchObject({
-      value: '有阻断',
+    expect(
+      buildMt5AccountCards(blocked)[0].items.find((item) => item.label === 'MT5 权限证据'),
+    ).toMatchObject({
+      value: '证据有阻断',
       status: 'blocked',
     });
   });
@@ -475,21 +479,25 @@ describe('mt5Model ledgers', () => {
 
     const cards = buildMt5AccountCards(snapshot);
 
-    expect(cards[0].title).toBe('美分账户学习车道');
-    expect(cards[1].title).toBe('美元账户部署车道');
-    expect(cards[1].items.find((item) => item.label === '账户车道')?.hint).toContain('当前新鲜守门证据');
-    expect(cards[0].items.find((item) => item.label === '允许信号模式')?.value).toContain(
+    expect(cards[0].title).toBe('美分账户 Shadow 观察');
+    expect(cards[1].title).toBe('美元账户 ReadOnly 观察');
+    expect(cards[1].items.find((item) => item.label === '账户车道')?.hint).toContain('没有 execution lane');
+    expect(cards[0].items.find((item) => item.label === '研究信号模式')?.value).toContain(
       'OPPORTUNITY_ENTRY',
     );
-    expect(cards[1].items.find((item) => item.label === '允许信号模式')?.hint).toContain('当前守门');
-    expect(cards[1].items.find((item) => item.label === 'USD 部署门')?.value).toContain('PAPER_MIRROR');
-    expect(cards[1].items.find((item) => item.label === 'USD 部署门')?.hint).toContain('USD_MICRO_LIVE');
+    expect(cards[1].items.find((item) => item.label === '研究信号模式')?.hint).toContain('broker order');
+    expect(cards[1].items.find((item) => item.label === 'USD Shadow 对照门')?.value).toContain(
+      'PAPER_MIRROR',
+    );
+    expect(cards[1].items.find((item) => item.label === 'USD Shadow 对照门')?.hint).toContain(
+      '不构成执行授权',
+    );
     expect(cards[0].items.find((item) => item.label === '点差门禁')).toMatchObject({
       value: '2.30 pips / 轻微偏宽',
       status: 'warn',
     });
-    expect(cards[0].items.find((item) => item.label === '点差门禁')?.hint).toContain('小仓机会入场');
-    expect(cards[1].items.find((item) => item.label === '点差门禁')?.hint).toContain('paper mirror');
+    expect(cards[0].items.find((item) => item.label === '点差门禁')?.hint).toContain('Shadow 建议权重');
+    expect(cards[1].items.find((item) => item.label === '点差门禁')?.hint).toContain('USD ReadOnly');
   });
 
   it('surfaces a cross-frontend MT5 snapshot recovery banner and matrix', () => {
@@ -769,7 +777,7 @@ describe('mt5Model ledgers', () => {
       value: '快照过期',
       status: 'warn',
     });
-    expect(centItems.find((item) => item.label === '后端执行守门')).toMatchObject({
+    expect(centItems.find((item) => item.label === '执行边界')).toMatchObject({
       value: '不可用 / 已阻断',
       status: 'blocked',
       hint: '恢复主 MT5/EA 进程并刷新 QuantGod_Dashboard.json。',
@@ -946,7 +954,7 @@ describe('mt5Model ledgers', () => {
     const centItems = buildMt5AccountCards(snapshot)[0].items;
 
     expect(snapshot.latestDashboardStale).toBe(false);
-    expect(centItems.find((item) => item.label === '后端执行守门')).toMatchObject({
+    expect(centItems.find((item) => item.label === '执行边界')).toMatchObject({
       value: '不可用 / 已阻断',
       status: 'blocked',
       hint: '等待 /api/latest 返回 mtime 新鲜度。',
@@ -1202,7 +1210,7 @@ describe('mt5Model ledgers', () => {
 
     const items = buildMt5SimulationItems(snapshot);
 
-    expect(items.find((item) => item.label === '执行守门 Universe（只读）')?.value).toBe('USDJPYc');
+    expect(items.find((item) => item.label === 'EA Shadow 观察 Universe')?.value).toBe('USDJPYc');
     expect(items.find((item) => item.label === '模拟Universe')?.value).toBe('USDJPYc');
     expect(items.find((item) => item.label === '当前策略证据')?.value).toBe('RSI 买入侧观察');
     expect(items.find((item) => item.label === '今日待办')?.hint).toContain('20:10-23:30');
@@ -1446,8 +1454,10 @@ describe('mt5Model ledgers', () => {
     expect(items.find((item) => item.label === '三方一致性')?.hint).toContain(
       'Strategy JSON 已同步 / Python Replay 已同步',
     );
-    expect(items.find((item) => item.label === '执行反馈晋级门')?.value).toBe('执行反馈阻断晋级');
-    expect(items.find((item) => item.label === '执行阻断 / 警告')?.value).toContain('滑点损伤');
+    expect(items.find((item) => item.label === '影子 / 历史反馈可信度门')?.value).toBe(
+      '反馈证据阻断研究晋级',
+    );
+    expect(items.find((item) => item.label === '反馈阻断 / 警告')?.value).toContain('滑点损伤');
     expect(items.find((item) => item.label === '当前最大 Case')?.value).toBe('USDJPY-SLIPPAGE-001');
     expect(items.find((item) => item.label === '当前最大 Case')?.status).toBe('warn');
     expect(items.find((item) => item.label === '下一代 GA 修复方向')?.value).toBe('降低滑点损伤');
@@ -1492,7 +1502,83 @@ describe('mt5Model ledgers', () => {
 
     expect(items.find((item) => item.label === '主阻断原因')?.value).toContain('高冲击新闻窗口');
     expect(items.find((item) => item.label === '主阻断原因')?.value).not.toContain('近期样本为正');
-    expect(items.find((item) => item.label === 'EA 干跑状态')?.status).toBe('warn');
+    expect(items.find((item) => item.label === '影子观察状态')?.status).toBe('warn');
+  });
+
+  it('renders new and legacy live-loop ready states as Shadow advisory only', () => {
+    const trustedConnection = {
+      ok: true,
+      snapshotFresh: true,
+      brokerConnected: true,
+      accountAuthorized: true,
+      writerFresh: true,
+      freshness: { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false },
+    };
+    const base = {
+      marketSession: 'MARKET_OPEN',
+      primaryConnection: trustedConnection,
+    };
+    const newItems = buildUsdJpyLiveLoopItems({
+      ...base,
+      usdJpyLiveLoop: {
+        state: 'SHADOW_ADVISORY_READY',
+        stateZh: 'Shadow advisory 已就绪，可继续观察与复核',
+        advisoryRouteZh: '所有策略仅用于 Shadow/ReadOnly 观察与研究复核。',
+        topAdvisoryPolicy: {
+          strategy: 'RSI_Reversal',
+          direction: 'LONG',
+          entryMode: 'STANDARD_ENTRY',
+        },
+        safety: { executionLaneExists: false, existingEaOwnsExecution: false },
+      },
+    });
+    const legacyItems = buildUsdJpyLiveLoopItems({
+      ...base,
+      usdJpyLiveLoop: {
+        state: 'READY_FOR_EXISTING_EA',
+        stateZh: 'RSI 买入路线已恢复，等待 EA 自身信号',
+        topLiveEligiblePolicy: {
+          strategy: 'RSI_Reversal',
+          direction: 'LONG',
+          entryMode: 'STANDARD_ENTRY',
+        },
+      },
+    });
+    const genericReadyItems = buildUsdJpyLiveLoopItems({
+      ...base,
+      usdJpyLiveLoop: { state: 'READY', stateZh: 'Ready' },
+    });
+
+    expect(newItems.find((item) => item.label === 'USDJPY Shadow Advisory')).toMatchObject({
+      value: '影子建议已就绪',
+      status: 'ok',
+      hint: '所有策略仅用于 Shadow/ReadOnly 观察与研究复核。',
+    });
+    expect(newItems.find((item) => item.label === 'Shadow 候选策略')?.value).toContain('RSI_Reversal');
+    expect(legacyItems.find((item) => item.label === 'USDJPY Shadow Advisory')).toMatchObject({
+      value: '影子建议已就绪（旧契约）',
+      status: 'ok',
+    });
+    expect(JSON.stringify(legacyItems)).not.toContain('等待 EA 自身信号');
+    expect(genericReadyItems.find((item) => item.label === 'USDJPY Shadow Advisory')?.status).toBe('warn');
+  });
+
+  it('labels RSI diagnostics as a non-executing Shadow boundary', () => {
+    const rows = buildRsiEntryDiagnosticRows({
+      marketSession: 'MARKET_OPEN',
+      usdJpyRsiEntryDiagnostics: {
+        state: 'WAIT_SIGNAL',
+        permissions: { liveMode: true, tradeAllowed: true },
+        guards: {},
+        rsi: {},
+      },
+    });
+
+    expect(rows.find((row) => row.项目 === '执行边界')).toMatchObject({
+      结论: 'Shadow / ReadOnly（无执行通道）',
+    });
+    expect(rows.find((row) => row.项目 === '执行边界')?.说明).toContain('不构成 broker 执行授权');
+    expect(rows.some((row) => row.项目 === '交易权限')).toBe(false);
   });
 
   it('does not let a shadow top-live placeholder hide the policy blocker', () => {
@@ -1681,7 +1767,7 @@ describe('mt5Model ledgers', () => {
 
     const items = buildMt5EvidenceOsLiteItems(snapshot);
 
-    expect(items.find((item) => item.label === '执行阻断 / 警告')?.status).toBe('warn');
+    expect(items.find((item) => item.label === '反馈阻断 / 警告')?.status).toBe('warn');
     expect(items.find((item) => item.label === '当前最大 Case')?.status).toBe('ok');
     expect(items.find((item) => item.label === '下一代 GA 修复方向')?.value).toBe('剔除不稳定候选');
     expect(items.find((item) => item.label === '下一代 GA 修复方向')?.status).toBe('ok');

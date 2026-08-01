@@ -60,7 +60,7 @@ const shortAxisItems = computed(() =>
             账号授权: '授权',
             报价新鲜度: '报价',
             'MT5 监控就绪': '监控',
-            交易执行就绪: '执行',
+            执行通道锁: '锁定',
           }[item.label] || item.label,
         shortValue: shortAxisValue(item.value),
       }))

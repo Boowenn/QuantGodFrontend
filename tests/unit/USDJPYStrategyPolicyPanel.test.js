@@ -48,8 +48,8 @@ describe('USDJPYStrategyPolicyPanel safety evidence', () => {
 
     expect(wrapper.get('[data-testid="risk-decision"]').text()).toBe('BLOCKED');
     expect(text).toContain('UNKNOWN');
-    expect(text).toContain('自动仓位上限 不可用');
-    expect(text).toContain('实盘路线证据不可用');
+    expect(text).toContain('研究容量上限 不可用');
+    expect(text).toContain('影子建议证据不可用');
     expect(text).not.toContain('2.00');
     expect(text).not.toContain('只允许 RSI_Reversal');
     wrapper.unmount();

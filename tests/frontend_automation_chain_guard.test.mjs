@@ -17,7 +17,10 @@ test('automation chain frontend uses api facade and Chinese UX', () => {
   assert.match(panel, /USDJPY Shadow \/ ReadOnly/);
   assert.match(panel, /主状态来源/);
   assert.match(panel, /Shadow 候选/);
-  assert.match(panel, /USDJPY Live Loop/);
+  assert.match(panel, /Shadow Advisory（兼容 Live Loop）/);
+  assert.match(panel, /topAdvisoryPolicy/);
+  assert.match(panel, /SHADOW_ADVISORY_READY/);
+  assert.match(panel, /READY_FOR_EXISTING_EA/);
   assert.match(panel, /技术链路详情/);
   assert.match(panel, /信号评估时间线/);
   assert.match(panel, /信号延迟/);

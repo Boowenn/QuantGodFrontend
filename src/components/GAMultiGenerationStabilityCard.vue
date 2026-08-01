@@ -31,7 +31,7 @@
       <article class="qg-mini-card">
         <span>可用性</span>
         <strong>{{ ga.evidenceUsability || 'UNKNOWN' }}</strong>
-        <small>不会直接实盘</small>
+        <small>永久 Shadow / 无 execution lane</small>
       </article>
     </div>
 
@@ -52,15 +52,18 @@ const loading = ref(false);
 const error = ref('');
 const payload = ref({});
 
-const ga = computed(() => (
-  payload.value?.report?.gaMultiGenerationStability
-  || payload.value?.gaMultiGenerationStability
-  || payload.value?.ga
-  || payload.value?.gaStability
-  || payload.value?.gaAudit
-  || {}
-));
-const recommendations = computed(() => ga.value?.recommendationsZh || (ga.value?.recommendation ? [ga.value.recommendation] : []));
+const ga = computed(
+  () =>
+    payload.value?.report?.gaMultiGenerationStability ||
+    payload.value?.gaMultiGenerationStability ||
+    payload.value?.ga ||
+    payload.value?.gaStability ||
+    payload.value?.gaAudit ||
+    {},
+);
+const recommendations = computed(
+  () => ga.value?.recommendationsZh || (ga.value?.recommendation ? [ga.value.recommendation] : []),
+);
 
 async function load() {
   loading.value = true;

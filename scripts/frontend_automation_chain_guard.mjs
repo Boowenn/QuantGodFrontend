@@ -63,8 +63,12 @@ assert(
   'AutomationChainPanel must expose Chinese status sections',
 );
 assert(
-  panel.includes('USDJPY Live Loop') && panel.includes('技术链路详情'),
-  'AutomationChainPanel must explain USDJPY live loop source of truth',
+  panel.includes('Shadow Advisory（兼容 Live Loop）') &&
+    panel.includes('topAdvisoryPolicy') &&
+    panel.includes('SHADOW_ADVISORY_READY') &&
+    panel.includes('READY_FOR_EXISTING_EA') &&
+    panel.includes('技术链路详情'),
+  'AutomationChainPanel must explain the Shadow advisory source of truth and legacy-state downgrade',
 );
 
 finish();

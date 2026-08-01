@@ -17,7 +17,7 @@
       <article>
         <span>候选数量</span>
         <strong>{{ candidateCount }}</strong>
-        <p>当前 GA generation {{ currentGeneration }}；仅整理候选，不触发实盘。</p>
+        <p>当前 GA generation {{ currentGeneration }}；仅整理 Shadow 候选，不能创建 execution lane。</p>
       </article>
       <article>
         <span>精英候选</span>

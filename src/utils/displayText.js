@@ -55,8 +55,8 @@ const STATUS_LABELS = new Map([
   ['KEEP_DRY_RUN_UNTIL_POLICY_PASS', '保持只读研究，等待策略通过'],
   ['WAIT_BAR', '等待下一根K线'],
   ['ROUTE_DISABLED', '路线已关闭'],
-  ['FULL', '可交易'],
-  ['LIVE_0_01', '0.01 手实盘观察'],
+  ['FULL', '旧 FULL 状态（已退役 / 只读）'],
+  ['LIVE_0_01', '旧 LIVE_0_01 状态（已退役 / 只读）'],
   ['SIMULATION_CANDIDATE', '模拟候选'],
   ['MACD_MOMENTUM_TURN', 'MACD 动量转折'],
   ['RULE_PROXY_NO_LLM', '规则代理评分，未调用模型'],
@@ -76,7 +76,7 @@ const STATUS_LABELS = new Map([
   ['APPLIED_SHADOW_ONLY', '已进入模拟重调'],
   ['CONFIG_ONLY_WAIT_REPORT_RETUNE', '已生成配置，等待报告回灌'],
   ['sell_side_demoted_after_loss_review', '卖出侧已降级，等待复核'],
-  ['live_forward_sample_lt_3', '实盘样本少于 3 笔'],
+  ['live_forward_sample_lt_3', '历史 live-forward 样本少于 3 笔'],
   ['sample_lt_20', '样本少于 20'],
   ['win_rate_lt_55', '胜率低于 55%'],
   ['avg_signed_pips_not_positive', '平均点数未转正'],
@@ -159,7 +159,7 @@ const KEY_LABELS = new Map([
   ['rows', '记录'],
   ['items', '项目'],
   ['timeframe', '周期'],
-  ['live', '实盘状态'],
+  ['live', '历史 live 兼容字段'],
   ['mode', '模式'],
 ]);
 
