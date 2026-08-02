@@ -1,8 +1,8 @@
 <template>
   <WorkspaceFrame
     eyebrow="AI 回测闭环"
-    title="一键只读回测、中文分析与 Telegram 推送"
-    description="把 MT5 后端回测、DeepSeek 中文建议和 Telegram 频道推送串成一个人工可控按钮；全程只读，不触发任何交易。"
+    title="一键只读回测、中文分析与可选 Telegram 推送"
+    description="把 MT5 后端回测和 DeepSeek 中文建议串成一个人工可控按钮；Telegram 默认不发送，勾选后才尝试一次外部投递。"
     :loading="loading"
     :error="error"
     @refresh="load"
@@ -12,13 +12,13 @@
         <p class="qg-eyebrow">自动化入口</p>
         <h2>只读回测闭环</h2>
         <p>
-          点击后依次执行：本地 Python 回测、AI 中文复核、Telegram 推送回执。它不会启动实盘交易，也不会修改 MT5
-          preset、授权锁或风控状态。
+          点击后依次执行本地 Python 回测与 AI 中文复核；只有显式勾选时才尝试一次 Telegram
+          投递。它不会启动实盘交易，也不会修改 MT5 preset、授权锁或风控状态。
         </p>
       </div>
       <div class="backtest-ai-hero__actions">
         <button type="button" class="qg-button qg-button--primary" :disabled="running" @click="runCycle">
-          {{ running ? '闭环执行中…' : '一键回测并推送' }}
+          {{ running ? '闭环执行中…' : sendTelegram ? '一键回测并推送' : '一键只读回测' }}
         </button>
         <button type="button" class="qg-button" :disabled="running || loading" @click="load">刷新证据</button>
       </div>
@@ -54,9 +54,9 @@
       <header>
         <div>
           <p class="qg-eyebrow">本次执行</p>
-          <h2>{{ runResult.ok ? '闭环已完成' : '闭环需要复核' }}</h2>
+          <h2>{{ runOutcome.label }}</h2>
         </div>
-        <StatusPill :status="runResult.ok ? 'ok' : 'warn'" :label="runResult.ok ? '成功' : '需复核'" />
+        <StatusPill :status="runOutcome.status" :label="runOutcome.statusLabel" />
       </header>
       <div class="backtest-ai-step-grid">
         <article v-for="step in runSteps" :key="step.label">
@@ -86,7 +86,7 @@
           </div>
           <div>
             <dt>Telegram</dt>
-            <dd>{{ notifySummary.configured ? '已联动频道' : '未完成联动' }}</dd>
+            <dd>{{ notifySummary.statusLabel }}</dd>
           </div>
         </dl>
       </section>
@@ -113,6 +113,7 @@ import {
   summarizeNotifyConfig,
 } from '../../services/backtestAiApi.js';
 import { formatDisplayValue } from '../../utils/displayText.js';
+import { normalizeTelegramDelivery } from '../../utils/telegramStatus.js';
 
 const loading = ref(false);
 const running = ref(false);
@@ -121,7 +122,7 @@ const runResult = ref(null);
 const symbolText = ref(DEFAULT_BACKTEST_SYMBOLS.join(','));
 const days = ref(180);
 const maxTasks = ref(20);
-const sendTelegram = ref(true);
+const sendTelegram = ref(false);
 const noDeepseek = ref(false);
 const state = reactive({
   backtest: null,
@@ -146,8 +147,9 @@ const symbols = computed(() =>
 const metrics = computed(() => [
   {
     label: 'Telegram联动',
-    value: notifySummary.value.configured ? '已配置' : '待配置',
-    hint: notifySummary.value.chatIdRedacted,
+    value: notifySummary.value.statusLabel,
+    hint: notifySummary.value.statusDetail,
+    status: notifySummary.value.statusTone,
   },
   {
     label: '回测任务',
@@ -181,14 +183,35 @@ const healthItems = computed(() => [
   },
   {
     label: 'Telegram频道',
-    description: '只推送消息，不接收命令',
-    status: notifySummary.value.configured ? 'ok' : 'warn',
-    statusLabel: notifySummary.value.configured ? '已联动' : '待配置',
+    description: notifySummary.value.statusDetail,
+    status: notifySummary.value.statusTone,
+    statusLabel: notifySummary.value.statusLabel,
   },
 ]);
 
+const runDelivery = computed(() => normalizeTelegramDelivery(runResult.value?.notify || {}));
+const runOutcome = computed(() => {
+  const result = runResult.value || {};
+  if (result.ok === false) {
+    return { label: '闭环需要复核', status: 'blocked', statusLabel: '执行失败' };
+  }
+  if (!result.sendTelegramRequested) {
+    return { label: '只读闭环已完成', status: 'ok', statusLabel: '未请求推送' };
+  }
+  if (runDelivery.value.code === 'SENT') {
+    return { label: '闭环与投递已完成', status: 'ok', statusLabel: '已投递' };
+  }
+  return {
+    label: '回测已完成，投递未确认',
+    status: runDelivery.value.tone,
+    statusLabel: runDelivery.value.label,
+  };
+});
+
 const runSteps = computed(() => {
   const result = runResult.value || {};
+  const sendRequested = result.sendTelegramRequested === true;
+  const delivery = runDelivery.value;
   return [
     {
       label: '只读回测',
@@ -204,9 +227,9 @@ const runSteps = computed(() => {
     },
     {
       label: 'Telegram推送',
-      value: sendTelegram.value ? '频道回执' : '本次跳过',
-      status: !sendTelegram.value ? 'locked' : result.notify?.ok === false ? 'warn' : 'ok',
-      statusLabel: !sendTelegram.value ? '未发送' : result.notify?.ok === false ? '需复核' : '已发送',
+      value: sendRequested ? delivery.detail : '默认关闭；本次未请求外部投递',
+      status: sendRequested ? delivery.tone : 'locked',
+      statusLabel: sendRequested ? delivery.label : '未发送',
     },
   ];
 });

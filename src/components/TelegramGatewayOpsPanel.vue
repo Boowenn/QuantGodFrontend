@@ -11,33 +11,33 @@
     <div class="qg-usdjpy-evolution__scenario-grid">
       <article>
         <span>Gateway 状态</span>
-        <strong>{{ statusText }}</strong>
-        <p>{{ state.reasonZh || '等待 Telegram Gateway 运维状态。' }}</p>
+        <strong data-testid="telegram-gateway-status">{{ statusText }}</strong>
+        <p>{{ statusDetail }}</p>
       </article>
       <article>
         <span>队列数量</span>
-        <strong>{{ state.queuedCount || 0 }}</strong>
-        <p>待投递 {{ state.pendingCount || 0 }}；ledger {{ state.ledgerCount || 0 }}。</p>
+        <strong data-testid="telegram-queued-count">{{ metric(state.queuedCount) }}</strong>
+        <p>待投递 {{ metric(state.pendingCount) }}；ledger {{ metric(state.ledgerCount) }}。</p>
       </article>
       <article>
-        <span>真实发送</span>
-        <strong>{{ state.actualSentCount || 0 }}</strong>
+        <span>真实发送（已确认）</span>
+        <strong data-testid="telegram-sent-count">{{ confirmedSentCount }}</strong>
         <p>最近 topic：{{ state.lastTopic || '无' }}</p>
       </article>
       <article>
         <span>去重 / 限频</span>
-        <strong>{{ state.suppressedCount || 0 }}</strong>
-        <p>{{ delivery.stateZh || '等待新报告' }}</p>
+        <strong>{{ metric(state.suppressedCount) }}</strong>
+        <p>{{ lastDeliveryState.label }}</p>
       </article>
       <article>
         <span>失败数量</span>
-        <strong>{{ state.failedCount || 0 }}</strong>
-        <p>{{ delivery.lastFailureReason || '暂无失败记录' }}</p>
+        <strong>{{ metric(state.failedCount) }}</strong>
+        <p>{{ delivery.lastFailureReason || '暂无可确认失败记录' }}</p>
       </article>
       <article>
         <span>安全边界</span>
-        <strong>{{ state.commandsAllowed ? '命令需关闭' : 'push-only' }}</strong>
-        <p>不接收 Telegram 命令，不改交易状态。</p>
+        <strong data-testid="telegram-safety-status">{{ safety.label }}</strong>
+        <p>{{ safety.reason }}</p>
       </article>
     </div>
 
@@ -52,11 +52,11 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in latestRows" :key="row.topic">
+          <tr v-for="row in latestRows" :key="row.eventId || row.topic">
             <td>{{ row.topic }}</td>
-            <td>{{ row.deliveryOk ? '已发送' : row.skipped ? '已抑制' : '待复核' }}</td>
-            <td>{{ row.reason || '—' }}</td>
-            <td>{{ shortTime(row.processedAtIso) }}</td>
+            <td>{{ deliveryState(row).label }}</td>
+            <td>{{ deliveryState(row).detail }}</td>
+            <td>{{ formatTelegramTimestamp(deliveryTimestamp(row)) }}</td>
           </tr>
         </tbody>
       </table>
@@ -71,14 +71,21 @@
     </div>
 
     <p class="qg-usdjpy-evolution__note">
-      安全边界：Gateway Ops 只观测和收集中文 push-only 报告；不下单、不平仓、不撤单、不修改 MT5
-      live preset、不接收 Telegram 交易命令。
+      安全边界：Gateway Ops 只观测和收集中文 push-only 报告；不下单、不平仓、不撤单、不修改 MT5 live
+      preset、不接收 Telegram 交易命令。
     </p>
   </section>
 </template>
 
 <script setup>
 import { computed } from 'vue';
+import {
+  formatTelegramTimestamp,
+  normalizeTelegramDelivery,
+  normalizeTelegramSafety,
+  telegramMetric,
+  unwrapTelegramPayload,
+} from '../utils/telegramStatus.js';
 
 defineEmits(['collect']);
 
@@ -97,9 +104,27 @@ const props = defineProps({
   },
 });
 
-const state = computed(() => props.payload?.status || props.payload || props.fallback || {});
+const state = computed(() => unwrapTelegramPayload(props.payload || props.fallback || {}));
 const delivery = computed(() => state.value?.deliveryObservability || {});
-const statusText = computed(() => state.value?.statusZh || state.value?.status || '等待 Gateway 状态');
+const safety = computed(() => normalizeTelegramSafety(state.value));
+const statusText = computed(() =>
+  safety.value.ready
+    ? state.value?.statusZh || state.value?.status || safety.value.label
+    : safety.value.label,
+);
+const statusDetail = computed(() =>
+  safety.value.ready ? state.value?.reasonZh || safety.value.reason : safety.value.reason,
+);
+const lastDeliveryState = computed(() =>
+  state.value?.lastDelivery
+    ? normalizeTelegramDelivery({ delivery: state.value.lastDelivery })
+    : normalizeTelegramDelivery({ status: Number(state.value?.pendingCount) > 0 ? 'QUEUED' : '' }),
+);
+const confirmedSentCount = computed(() => {
+  const count = telegramMetric(state.value?.actualSentCount);
+  if (count === '—' || Number(count) === 0) return count;
+  return delivery.value?.lastActualSentAtIso ? count : '—';
+});
 const latestRows = computed(() => {
   const rows = state.value?.latestTopicRows || [];
   return Array.isArray(rows) ? rows : [];
@@ -109,8 +134,15 @@ const pendingRows = computed(() => {
   return Array.isArray(rows) ? rows : [];
 });
 
-function shortTime(value) {
-  if (!value) return '—';
-  return String(value).replace('T', ' ').replace('Z', '').slice(0, 16);
+function deliveryState(row) {
+  return normalizeTelegramDelivery(row);
+}
+
+function deliveryTimestamp(row) {
+  return row?.sentAtIso || row?.deliveredAtIso || row?.processedAtIso;
+}
+
+function metric(value) {
+  return telegramMetric(value);
 }
 </script>

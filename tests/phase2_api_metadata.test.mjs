@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { afterEach, test } from 'node:test';
+import { URL } from 'node:url';
 
 import {
   endpointErrorMessage,
@@ -7,6 +9,10 @@ import {
   endpointSummary,
   fetchPhase2Json,
   postPhase2Json,
+  runMt5AiMonitor,
+  sendNotifyDailyDigest,
+  sendNotifyRuntimeScan,
+  sendNotifyTest,
 } from '../src/services/phase2Api.js';
 
 const originalFetch = globalThis.fetch;
@@ -109,4 +115,73 @@ test('postPhase2Json uses the local POST guard and rejects every non-ok command 
 
   globalThis.fetch = async () => jsonResponse({ sent: true });
   await assert.rejects(postPhase2Json('/api/notify/test', { dryRun: true }), /did not confirm ok=true/);
+});
+
+test('Phase 2 Telegram commands default to dry-run and non-force operation', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return jsonResponse({ ok: true, dryRun: true });
+  };
+
+  await sendNotifyTest('probe');
+  await sendNotifyDailyDigest();
+  await sendNotifyRuntimeScan();
+  await runMt5AiMonitor();
+
+  const bodies = calls.map((call) => JSON.parse(call.options.body));
+  assert.deepEqual(
+    calls.map((call) => call.url),
+    [
+      '/api/notify/test',
+      '/api/notify/daily-digest',
+      '/api/notify/runtime-scan',
+      '/api/notify/mt5-ai-monitor/run',
+    ],
+  );
+  assert.deepEqual(bodies.slice(0, 3), [
+    { message: 'probe', send: false, dryRun: true },
+    { send: false, dryRun: true },
+    { send: false, dryRun: true },
+  ]);
+  assert.deepEqual(bodies[3], {
+    send: false,
+    dryRun: true,
+    force: false,
+    minIntervalSeconds: 900,
+    symbols: 'USDJPYc',
+    timeframes: 'M15,H1',
+    noDeepseek: false,
+  });
+});
+
+test('Phase 2 Telegram commands require an explicit non-dry-run send request', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return jsonResponse({ ok: true, sent: false });
+  };
+
+  await sendNotifyTest('probe', false);
+  await sendNotifyDailyDigest(false);
+  await sendNotifyRuntimeScan(false);
+
+  assert.deepEqual(
+    calls.map((call) => JSON.parse(call.options.body)),
+    [
+      { message: 'probe', send: true, dryRun: false },
+      { send: true, dryRun: false },
+      { send: true, dryRun: false },
+    ],
+  );
+});
+
+test('Phase 2 AI workspace keeps force disabled at its explicit push call site', () => {
+  const source = readFileSync(
+    new URL('../src/workspaces/phase2/Phase2OperationsWorkspace.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /force:\s*false/);
+  assert.doesNotMatch(source, /force:\s*true/);
 });

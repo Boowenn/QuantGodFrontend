@@ -21,8 +21,8 @@
 
     <section class="ai-workspace__telegram">
       <div>
-        <span class="ai-workspace__eyebrow">DeepSeek + Telegram 自动联动</span>
-        <h3>一键读取证据、自动问模型、返回中文建议并推送频道</h3>
+        <span class="ai-workspace__eyebrow">DeepSeek 分析 + 可选 Telegram 推送</span>
+        <h3>默认只生成中文建议；显式点击后才尝试一次频道投递</h3>
         <p>
           使用本机配置的 DeepSeek flash 和 Telegram push-only 通道；报告会写入本地
           runtime，边界保持只读，不会下单、平仓、撤单或修改实盘参数。
@@ -103,6 +103,7 @@ import AnalysisHistory from './AnalysisHistory.vue';
 import DecisionCard from './DecisionCard.vue';
 import ReasoningTabs from './ReasoningTabs.vue';
 import SymbolSelector from './SymbolSelector.vue';
+import { normalizeTelegramDelivery, telegramAdvisoryLabel } from '../../utils/telegramStatus.js';
 
 const symbols = ref([]);
 const symbol = ref(USDJPY_FOCUS_SYMBOL);
@@ -174,7 +175,7 @@ async function runDeepSeekTelegramPush(send) {
       symbols: [symbol.value],
       timeframes,
       send,
-      force: true,
+      force: false,
       noDeepseek: false,
     });
     if (payload?.ok === false) {
@@ -226,13 +227,9 @@ function phase1ApiErrorMessage(payload, fallback) {
 }
 
 function itemStatusText(item) {
-  if (item?.delivery?.observation && item?.delivery?.status === 'sent')
-    return `已推送观察摘要 #${item.delivery.telegramMessageId || '--'}`;
-  if (item?.delivery?.status === 'sent') return `已推送 #${item.delivery.telegramMessageId || '--'}`;
-  if (item?.delivery?.status === 'dry_run') return '已分析，未推送';
-  if (item?.delivery?.status === 'skipped_hold') return '观望结果未生成交易建议';
-  if (item?.delivery?.status === 'skipped') return `跳过：${item.delivery.reason || item.reason || '--'}`;
-  return item?.delivery?.error || item?.delivery?.status || '待确认';
+  const delivery = normalizeTelegramDelivery(item);
+  if (item?.delivery?.observation && delivery.code === 'SENT') return `观察摘要${delivery.label}`;
+  return delivery.label;
 }
 
 function itemSummaryText(item) {
@@ -252,16 +249,11 @@ function itemDeepSeekText(item) {
 
 function itemFusionText(item) {
   const fusion = item?.fusion || {};
-  return fusion.finalAction || item?.decision?.action || 'HOLD';
+  return telegramAdvisoryLabel(fusion.finalAction || item?.decision?.action || 'HOLD');
 }
 
 function itemDeliveryText(item) {
-  const delivery = item?.delivery || {};
-  if (delivery.observation && delivery.telegramMessageId) return `观察摘要 #${delivery.telegramMessageId}`;
-  if (delivery.telegramMessageId) return `频道消息 #${delivery.telegramMessageId}`;
-  if (delivery.error) return delivery.error;
-  if (delivery.status === 'skipped_hold') return '观望，不推交易建议';
-  return delivery.status || '未推送';
+  return normalizeTelegramDelivery(item).detail;
 }
 
 onMounted(bootstrap);

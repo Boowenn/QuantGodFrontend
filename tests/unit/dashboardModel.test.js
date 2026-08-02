@@ -13,9 +13,12 @@ import {
   buildOperatorOverviewSupportItems,
   buildSnapshotImpactSummary,
   buildSnapshotRootCauseBanner,
+  buildTelegramGatewayItems,
   normalizeDashboardSnapshot,
   resolveDashboardEvidenceState,
   resolveOperatorOverviewState,
+  telegramGatewayStatus,
+  telegramGatewayStatusLabel,
 } from '../../src/workspaces/dashboard/dashboardModel.js';
 
 function freshPayload(equity = 1000) {
@@ -90,6 +93,32 @@ function operatorOverview(overrides = {}) {
     ...overrides,
   };
   return { ok: true, payload, _api: { ok: true, status: 200 } };
+}
+
+function safeTelegramGateway(overrides = {}) {
+  return {
+    ok: true,
+    status: 'GATEWAY_OBSERVABLE',
+    pushAllowed: true,
+    commandsAllowed: false,
+    commandsEnvRequested: false,
+    queuedCount: 0,
+    pendingCount: 0,
+    actualSentCount: 0,
+    safety: {
+      pushOnly: true,
+      gatewayReceivesCommands: false,
+      telegramCommandExecutionAllowed: false,
+      orderSendAllowed: false,
+      closeAllowed: false,
+      cancelAllowed: false,
+      livePresetMutationAllowed: false,
+      writesMt5OrderRequest: false,
+      externalMarketRealMoneyAllowed: false,
+    },
+    _api: { ok: true, status: 200 },
+    ...overrides,
+  };
 }
 
 describe('Forex-only dashboard model', () => {
@@ -379,5 +408,65 @@ describe('Forex-only dashboard model', () => {
     }).find((item) => item.endpoint === '/api/mt5-readonly/snapshot');
 
     expect(endpoint).toMatchObject({ status: 'blocked', value: '过期' });
+  });
+
+  it('keeps Telegram Gateway safety fail-closed on missing evidence', () => {
+    const telegramGateway = {
+      ok: true,
+      status: 'GATEWAY_OBSERVABLE',
+      queuedCount: 2,
+      _api: { ok: true, status: 200 },
+    };
+    const raw = { telegramGateway };
+
+    expect(telegramGatewayStatus(raw)).toBe('blocked');
+    expect(telegramGatewayStatusLabel(raw)).toBe('Telegram 边界未确认');
+    expect(buildTelegramGatewayItems(raw)).toContainEqual(
+      expect.objectContaining({
+        label: '边界',
+        value: 'Telegram 边界未确认',
+        status: 'blocked',
+      }),
+    );
+  });
+
+  it('distinguishes blocked command requests, disabled push, and a ready Gateway', () => {
+    expect(
+      telegramGatewayStatus({
+        telegramGateway: safeTelegramGateway({ commandsEnvRequested: true }),
+      }),
+    ).toBe('blocked');
+    expect(
+      telegramGatewayStatusLabel({
+        telegramGateway: safeTelegramGateway({ commandsEnvRequested: true }),
+      }),
+    ).toContain('命令开关');
+    expect(telegramGatewayStatus({ telegramGateway: safeTelegramGateway({ pushAllowed: false }) })).toBe(
+      'warn',
+    );
+    expect(
+      telegramGatewayStatusLabel({
+        telegramGateway: safeTelegramGateway({ pushAllowed: false }),
+      }),
+    ).toBe('Telegram 推送已关闭');
+    expect(telegramGatewayStatus({ telegramGateway: safeTelegramGateway() })).toBe('ok');
+    expect(telegramGatewayStatusLabel({ telegramGateway: safeTelegramGateway() })).toBe(
+      'Telegram 仅出站推送已就绪',
+    );
+  });
+
+  it('does not expose aggregate sent counts without delivery time evidence', () => {
+    const unconfirmed = buildTelegramGatewayItems({
+      telegramGateway: safeTelegramGateway({ actualSentCount: 3 }),
+    });
+    const confirmed = buildTelegramGatewayItems({
+      telegramGateway: safeTelegramGateway({
+        actualSentCount: 3,
+        deliveryObservability: { lastActualSentAtIso: '2026-08-01T12:00:00Z' },
+      }),
+    });
+
+    expect(unconfirmed.find((item) => item.label === '已确认投递')?.value).toBe('—');
+    expect(confirmed.find((item) => item.label === '已确认投递')?.value).toBe(3);
   });
 });

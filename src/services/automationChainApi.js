@@ -7,8 +7,10 @@ export function fetchAutomationChainStatus() {
 }
 
 export function runAutomationChain({ send = false } = {}) {
-  const query = send ? `?${USDJPY_SCOPE}&send=1` : `?${USDJPY_SCOPE}`;
-  return postCommandJson(`/api/automation-chain/run${query}`, {});
+  return postCommandJson(`/api/automation-chain/run?${USDJPY_SCOPE}`, {
+    send: Boolean(send),
+    dryRun: !send,
+  });
 }
 
 export function fetchAutomationChainTelegramText({ refresh = false } = {}) {

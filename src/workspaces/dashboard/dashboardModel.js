@@ -1,5 +1,11 @@
 import { humanizeStatus } from '../../utils/displayText.js';
 import { normalizeMt5ReadonlyFreshness } from '../../utils/mt5ReadonlyFreshness.js';
+import {
+  normalizeTelegramDelivery,
+  normalizeTelegramSafety,
+  telegramMetric,
+  unwrapTelegramPayload,
+} from '../../utils/telegramStatus.js';
 
 function isObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
@@ -1053,28 +1059,32 @@ export function buildAgentOpsRows(raw = {}) {
 }
 
 export function telegramGatewayStatus(raw = {}) {
-  const state = unwrap(raw.telegramGateway);
-  if (!apiSucceeded(raw.telegramGateway)) return 'blocked';
-  if (state.blocked === true || state.status === 'BLOCKED') return 'blocked';
-  return state.ok === true || state.status === 'PASS' ? 'ok' : 'warn';
+  if (!resolveDashboardEvidenceState(raw.telegramGateway).transportOk) return 'blocked';
+  return normalizeTelegramSafety(unwrapTelegramPayload(raw.telegramGateway)).tone;
 }
 
 export function telegramGatewayStatusLabel(raw = {}) {
-  const state = unwrap(raw.telegramGateway);
-  return (
-    state.statusZh ||
-    state.overallStatusZh ||
-    (apiSucceeded(raw.telegramGateway) ? '等待投递状态' : '接口不可用')
-  );
+  if (!resolveDashboardEvidenceState(raw.telegramGateway).transportOk) return '接口不可用';
+  return normalizeTelegramSafety(unwrapTelegramPayload(raw.telegramGateway)).label;
 }
 
 export function buildTelegramGatewayItems(raw = {}) {
-  const state = unwrap(raw.telegramGateway);
+  const state = unwrapTelegramPayload(raw.telegramGateway);
+  const safety = normalizeTelegramSafety(state);
+  const sentCount = telegramMetric(state.actualSentCount ?? state.deliveredCount);
+  const lastDelivery = state.lastDelivery
+    ? normalizeTelegramDelivery({ delivery: state.lastDelivery })
+    : normalizeTelegramDelivery({});
+  const hasAggregateReceipt = Boolean(state.deliveryObservability?.lastActualSentAtIso);
+  const confirmedSentCount =
+    sentCount === '—' || Number(sentCount) === 0 || lastDelivery.code === 'SENT' || hasAggregateReceipt
+      ? sentCount
+      : '—';
   return [
-    { label: '队列', value: state.queuedCount ?? '—' },
-    { label: '待投递', value: state.pendingCount ?? '—' },
-    { label: '已发送', value: state.actualSentCount ?? '—' },
-    { label: '边界', value: '只推送通知，不接收交易命令' },
+    { label: '队列', value: telegramMetric(state.queuedCount) },
+    { label: '待投递', value: telegramMetric(state.pendingCount) },
+    { label: '已确认投递', value: confirmedSentCount },
+    { label: '边界', value: safety.label, status: safety.tone, hint: safety.reason },
   ];
 }
 

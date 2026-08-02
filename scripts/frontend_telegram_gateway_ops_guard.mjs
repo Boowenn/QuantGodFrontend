@@ -5,12 +5,13 @@ const repoRoot = process.cwd();
 const errors = [];
 const files = [
   'src/services/telegramGatewayOpsApi.js',
+  'src/utils/telegramStatus.js',
   'src/components/TelegramGatewayOpsPanel.vue',
   'src/components/USDJPYEvolutionPanel.vue',
   'package.json',
 ];
 const forbidden =
-  /\/QuantGod_.*\.(json|csv|jsonl)|runtime\/notifications|OrderSend|telegramCommandExecutionAllowed\s*[:=]\s*true|fetch\s*\(/i;
+  /\/QuantGod_.*\.(json|csv|jsonl)|runtime\/notifications|\bOrderSend\b|telegramCommandExecutionAllowed\s*[:=]\s*true|fetch\s*\(/i;
 
 function read(rel) {
   const full = path.join(repoRoot, rel);
@@ -54,6 +55,26 @@ for (const marker of [
   '不接收 Telegram 交易命令',
 ]) {
   if (!component.includes(marker)) errors.push(`Telegram Gateway Ops panel missing marker: ${marker}`);
+}
+for (const marker of [
+  'normalizeTelegramDelivery',
+  'normalizeTelegramSafety',
+  'telegramMetric',
+  'unwrapTelegramPayload',
+]) {
+  if (!component.includes(marker))
+    errors.push(`Telegram Gateway Ops panel missing fail-closed helper: ${marker}`);
+}
+if (/props\.payload\?\.status\s*\|\|/.test(component)) {
+  errors.push('Telegram Gateway Ops panel must not replace a payload object with its string status field');
+}
+if (/row\.deliveryOk\s*\?\s*['"]已发送/.test(component)) {
+  errors.push('Telegram Gateway Ops panel must not treat deliveryOk without a receipt as sent');
+}
+
+const telegramStatus = read('src/utils/telegramStatus.js');
+for (const marker of ['BOUNDARY_UNCONFIRMED', 'PUSH_UNCONFIRMED', 'UNCONFIRMED', 'explicitSent && receipt']) {
+  if (!telegramStatus.includes(marker)) errors.push(`Telegram status helper missing marker: ${marker}`);
 }
 
 const panel = read('src/components/USDJPYEvolutionPanel.vue');
