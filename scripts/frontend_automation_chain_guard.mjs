@@ -43,6 +43,10 @@ assert(
   'automationChainApi commands must fail closed through postCommandJson',
 );
 assert(
+  /send:\s*Boolean\(send\)/.test(service) && /dryRun:\s*!send/.test(service) && !/send=1/.test(service),
+  'automationChainApi Telegram delivery must require explicit body send plus dryRun opt-out',
+);
+assert(
   !/USDJPYc,EURUSDc,XAUUSDc/.test(service + panel),
   'automation chain frontend must not default to multi-symbol scope',
 );

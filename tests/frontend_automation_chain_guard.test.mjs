@@ -12,6 +12,9 @@ test('automation chain frontend uses api facade and Chinese UX', () => {
   assert.match(service, /fetchJson/);
   assert.match(service, /postCommandJson/);
   assert.match(service, /symbols=USDJPYc/);
+  assert.match(service, /send:\s*Boolean\(send\)/);
+  assert.match(service, /dryRun:\s*!send/);
+  assert.doesNotMatch(service, /send=1/);
   assert.doesNotMatch(service + panel, /USDJPYc,EURUSDc,XAUUSDc/);
   assert.doesNotMatch(service, /apiGet|apiPost/);
   assert.match(panel, /USDJPY Shadow \/ ReadOnly/);

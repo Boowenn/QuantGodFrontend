@@ -177,16 +177,28 @@ export function loadNotifyHistory(limit = 50) {
   return fetchPhase2Json(`/api/notify/history?limit=${Number(limit) || 50}`, { ok: false, items: [] });
 }
 
-export function sendNotifyTest(message, dryRun = false) {
-  return postPhase2Json('/api/notify/test', { message, dryRun }, { ok: false, error: 'notify_test_failed' });
+export function sendNotifyTest(message, dryRun = true) {
+  return postPhase2Json(
+    '/api/notify/test',
+    { message, send: dryRun === false, dryRun },
+    { ok: false, error: 'notify_test_failed' },
+  );
 }
 
-export function sendNotifyDailyDigest(dryRun = false) {
-  return postPhase2Json('/api/notify/daily-digest', { dryRun }, { ok: false, error: 'daily_digest_failed' });
+export function sendNotifyDailyDigest(dryRun = true) {
+  return postPhase2Json(
+    '/api/notify/daily-digest',
+    { send: dryRun === false, dryRun },
+    { ok: false, error: 'daily_digest_failed' },
+  );
 }
 
 export function sendNotifyRuntimeScan(dryRun = true) {
-  return postPhase2Json('/api/notify/runtime-scan', { dryRun }, { ok: false, error: 'runtime_scan_failed' });
+  return postPhase2Json(
+    '/api/notify/runtime-scan',
+    { send: dryRun === false, dryRun },
+    { ok: false, error: 'runtime_scan_failed' },
+  );
 }
 
 export function loadAiMonitorConfig() {
@@ -199,13 +211,15 @@ export function loadAiMonitorConfig() {
 export function runMt5AiMonitor({
   send = false,
   dryRun = true,
+  force = false,
+  minIntervalSeconds = 900,
   symbols = 'USDJPYc',
   timeframes = 'M15,H1',
   noDeepseek = false,
 } = {}) {
   return postPhase2Json(
     '/api/notify/mt5-ai-monitor/run',
-    { send, dryRun, symbols, timeframes, noDeepseek },
+    { send, dryRun, force, minIntervalSeconds, symbols, timeframes, noDeepseek },
     { ok: false, error: 'mt5_ai_monitor_failed' },
   );
 }

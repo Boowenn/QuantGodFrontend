@@ -380,11 +380,12 @@ export function enqueueUSDJPYTelegramGatewayTest({ text = '' } = {}) {
 }
 
 export function dispatchUSDJPYTelegramGateway({ send = false, limit = 8 } = {}) {
-  const params = new URLSearchParams();
-  if (send) params.set('send', '1');
-  if (limit) params.set('limit', String(limit));
-  const query = params.toString() ? `?${params.toString()}` : '';
-  return postUSDJPYLabJson(`${BASE}/telegram-gateway/dispatch${query}`, { focusSymbol: 'USDJPYc' });
+  return postUSDJPYLabJson(`${BASE}/telegram-gateway/dispatch`, {
+    focusSymbol: 'USDJPYc',
+    send: Boolean(send),
+    dryRun: !send,
+    limit,
+  });
 }
 
 export function fetchUSDJPYAgentOpsHealth({ refresh = false } = {}) {

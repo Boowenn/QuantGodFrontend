@@ -117,10 +117,13 @@
       </article>
       <article class="qg-usdjpy-evolution__card">
         <span>通知网关</span>
-        <strong>{{ telegramGateway.pendingCount || 0 }} 待投递</strong>
+        <strong
+          >{{ telegramMetric(telegramGateway.pendingCount) }} 待投递 ·
+          {{ telegramGatewaySafety.label }}</strong
+        >
         <p>
-          已投递 {{ telegramGateway.deliveredCount || 0 }}；队列
-          {{ telegramGateway.queuedCount || 0 }}；去重、限频、 ledger 已接入。
+          已确认投递 {{ telegramGatewayConfirmedCount }}；队列
+          {{ telegramMetric(telegramGateway.queuedCount) }}；去重、限频、 ledger 已接入。
         </p>
       </article>
     </div>
@@ -1100,6 +1103,12 @@
 <script setup>
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { buildCaseMemoryCandidates, fetchCaseMemoryStatus } from '../services/caseMemoryApi.js';
+import {
+  normalizeTelegramDelivery,
+  normalizeTelegramSafety,
+  telegramMetric,
+  unwrapTelegramPayload,
+} from '../utils/telegramStatus.js';
 import { fetchProductionEvidenceStatus } from '../services/productionEvidenceApi.js';
 import {
   buildStrategyFactoryIntentPlan,
@@ -1432,9 +1441,22 @@ const gaSeedHints = computed(() => {
   const rows = caseMemory.value?.gaSeedHints || [];
   return Array.isArray(rows) ? rows : [];
 });
-const telegramGateway = computed(
-  () => telegramGatewayPayload.value || evidenceOS.value?.telegramGateway || {},
+const telegramGateway = computed(() =>
+  unwrapTelegramPayload(telegramGatewayPayload.value || evidenceOS.value?.telegramGateway || {}),
 );
+const telegramGatewaySafety = computed(() => normalizeTelegramSafety(telegramGateway.value));
+const telegramGatewayLastDelivery = computed(() =>
+  telegramGateway.value?.lastDelivery
+    ? normalizeTelegramDelivery({ delivery: telegramGateway.value.lastDelivery })
+    : normalizeTelegramDelivery({}),
+);
+const telegramGatewayConfirmedCount = computed(() => {
+  const count = telegramMetric(
+    telegramGateway.value?.actualSentCount ?? telegramGateway.value?.deliveredCount,
+  );
+  if (count === '—' || Number(count) === 0) return count;
+  return telegramGatewayLastDelivery.value.code === 'SENT' ? count : '—';
+});
 const eaRepro = computed(
   () =>
     eaReproPayload.value ||
@@ -2050,8 +2072,14 @@ function strategyFactoryIntentSummary() {
 }
 
 function telegramGatewayOpsSummary() {
-  const state = telegramGatewayOpsPayload.value?.status || telegramGatewayOpsPayload.value || {};
-  return `Telegram Gateway 已收集：队列 ${state.queuedCount || 0}；待投递 ${state.pendingCount || 0}；真实发送 ${state.actualSentCount || 0}；抑制 ${state.suppressedCount || 0}。`;
+  const state = unwrapTelegramPayload(telegramGatewayOpsPayload.value || {});
+  const safety = normalizeTelegramSafety(state);
+  const sentCount = telegramMetric(state.actualSentCount);
+  const confirmedSentCount =
+    sentCount === '—' || Number(sentCount) === 0 || state.deliveryObservability?.lastActualSentAtIso
+      ? sentCount
+      : '—';
+  return `Telegram Gateway 已收集：${safety.label}；队列 ${telegramMetric(state.queuedCount)}；待投递 ${telegramMetric(state.pendingCount)}；已确认投递 ${confirmedSentCount}；抑制 ${telegramMetric(state.suppressedCount)}。`;
 }
 
 function strategyBacktestSummary() {

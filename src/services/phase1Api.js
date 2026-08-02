@@ -53,8 +53,8 @@ export async function runDeepSeekTelegram({
   symbols = [],
   symbol = '',
   timeframes = ['M15', 'H1', 'H4', 'D1'],
-  send = true,
-  force = true,
+  send = false,
+  force = false,
   noDeepseek = false,
 } = {}) {
   const normalizedSymbols = Array.isArray(symbols) && symbols.length ? symbols : [symbol].filter(Boolean);
@@ -62,6 +62,7 @@ export async function runDeepSeekTelegram({
     symbols: normalizedSymbols,
     timeframes,
     send,
+    dryRun: !send,
     force,
     noDeepseek,
     minIntervalSeconds: force ? 0 : 900,

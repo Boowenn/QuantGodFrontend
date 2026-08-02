@@ -1,4 +1,10 @@
 import { fetchCommandJson, fetchJsonOrFallback, postCommandJson } from './apiClient.js';
+import {
+  buildTelegramDigest,
+  formatTelegramTimestamp,
+  normalizeTelegramDelivery,
+  normalizeTelegramSafety,
+} from '../utils/telegramStatus.js';
 
 export const DEFAULT_BACKTEST_SYMBOLS = ['USDJPYc'];
 export const DEFAULT_BACKTEST_TIMEFRAMES = ['M15', 'H1', 'H4', 'D1'];
@@ -87,8 +93,15 @@ export function summarizeAiReport(aiLatest = {}) {
 }
 
 export function summarizeNotifyConfig(config = {}) {
+  const safety = normalizeTelegramSafety(config, { requireConfigured: true });
   return {
-    configured: Boolean(config.telegramConfigured && config.telegramPushAllowed),
+    configured: safety.configured === true,
+    pushAllowed: safety.pushAllowed === true,
+    ready: safety.ready,
+    status: safety.code,
+    statusLabel: safety.label,
+    statusDetail: safety.reason,
+    statusTone: safety.tone,
     tokenConfigured: Boolean(config.tokenConfigured),
     chatConfigured: Boolean(config.chatConfigured),
     chatIdRedacted: config.chatIdRedacted || '未配置频道',
@@ -111,24 +124,6 @@ export function backtestRows(backtest = {}) {
     }));
 }
 
-function compactText(value, fallback = '—', max = 72) {
-  const text = String(value ?? '').trim();
-  if (!text) return fallback;
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-}
-
-function rowPf(row = {}) {
-  return row.profitFactor ?? row.pf ?? row.forwardPf ?? row.liveForwardPf ?? row.score ?? null;
-}
-
-function rowScore(row = {}) {
-  return row.rankScore ?? row.score ?? row.aiScore ?? row.compositeScore ?? null;
-}
-
-function rowTrades(row = {}) {
-  return row.trades ?? row.closedTrades ?? row.sampleTrades ?? row.tradeCount ?? null;
-}
-
 export function aiRows(aiLatest = {}) {
   return toArray(aiLatest)
     .slice(0, 6)
@@ -149,12 +144,16 @@ export function notifyRows(notifyHistory = {}) {
   return toArray(notifyHistory)
     .slice(-8)
     .reverse()
-    .map((item) => ({
-      时间: item.timestamp || item.createdAt || item.time || '—',
-      类型: item.eventType || item.event_type || '通知',
-      状态: item.sent ? '已发送' : item.error ? '发送异常' : '等待确认',
-      说明: item.error || item.messagePreview || item.message || 'Telegram 推送记录',
-    }));
+    .map((item) => {
+      const delivery = normalizeTelegramDelivery(item);
+      const timestamp = item.timestamp || item.createdAt || item.time;
+      return {
+        时间: timestamp ? formatTelegramTimestamp(timestamp) : '—',
+        类型: item.eventType || item.event_type || '通知',
+        状态: delivery.label,
+        说明: delivery.detail || item.messagePreview || 'Telegram 投递记录',
+      };
+    });
 }
 
 function humanBacktestState(row = {}) {
@@ -175,60 +174,35 @@ function humanBacktestDecision(row = {}) {
   return blockers.length ? '仍有阻断项' : '等待 AI 复核';
 }
 
-function formatNumber(value, digits = 2) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '—';
-  return number.toLocaleString('zh-CN', { maximumFractionDigits: digits, minimumFractionDigits: digits });
-}
-
 export function buildBacktestTelegramMessage({ backtest, ai, symbols }) {
   const backtestSummary = summarizeBacktest(backtest);
   const aiSummary = summarizeAiReport(ai);
   const rawRows = backtestSummary.rows.slice(0, 5);
-  const topRows = backtestRows(backtest).slice(0, 5);
-  const cautiousRows = rawRows
-    .filter((row) => humanBacktestState(row).includes('不足') || humanBacktestState(row).includes('研究'))
-    .slice(0, 3);
-  const readyRows = rawRows.filter((row) => humanBacktestState(row).includes('复核')).slice(0, 3);
-  const lines = [
-    '📊 QuantGod AI 回测闭环完成',
-    '',
-    `观察品种：${cleanSymbols(symbols).join('、')}`,
-    `回测任务：${backtestSummary.taskCount} 个，需谨慎 ${backtestSummary.cautionCount} 个，可复核 ${backtestSummary.readyCount} 个`,
-    `最佳路线：${backtestSummary.topRouteKey}`,
-    `最佳候选：${compactText(backtestSummary.topCandidateId, '暂无候选', 120)}`,
-    `候选评分：${backtestSummary.topRankScore == null ? '—' : formatNumber(backtestSummary.topRankScore, 2)}`,
-    '',
-    `AI结论：${aiSummary.verdict}`,
-    `AI摘要：${compactText(aiSummary.headline, '等待 AI 复核', 180)}`,
-    '',
-    '候选明细：',
-    ...topRows.map((row, index) => {
-      const raw = rawRows[index] || {};
-      const pf = rowPf(raw);
-      const score = rowScore(raw);
-      const trades = rowTrades(raw);
-      return `${index + 1}. ${compactText(row.路线, '未知路线', 36)}｜${row.品种} ${row.周期}｜PF ${pf == null ? row.PF : formatNumber(pf, 2)}｜胜率 ${row.胜率}｜样本 ${trades ?? '—'}｜评分 ${score == null ? '—' : formatNumber(score, 2)}｜${row.建议}`;
-    }),
-    readyRows.length ? '' : null,
-    readyRows.length ? '可人工复核：' : null,
-    ...readyRows.map(
-      (row, index) =>
-        `${index + 1}. ${compactText(row.routeKey || row.strategy || '未知路线', '未知路线', 42)} / ${row.symbol || '—'} / ${humanBacktestDecision(row)}`,
-    ),
-    cautiousRows.length ? '' : null,
-    cautiousRows.length ? '主要阻断：' : null,
-    ...cautiousRows.map((row, index) => {
-      const blockers = Array.isArray(row.blockers) ? row.blockers.slice(0, 2).join('、') : '';
-      return `${index + 1}. ${compactText(row.routeKey || row.strategy || '未知路线', '未知路线', 42)}：${compactText(blockers || humanBacktestDecision(row), '继续研究', 120)}`;
-    }),
-    '',
-    '安全边界：只读回测、AI建议、Telegram只推送；不下单、不平仓、不撤单、不改实盘配置。',
-  ];
-  return lines
-    .filter((line) => line !== null)
-    .join('\n')
-    .slice(0, 2400);
+  const firstBlockedRow = rawRows.find((row) => Array.isArray(row.blockers) && row.blockers.length);
+  const hasReviewCandidate = backtestSummary.readyCount > 0;
+  return buildTelegramDigest({
+    icon: hasReviewCandidate ? '🟡' : '🔵',
+    topic: 'AI 回测状态',
+    conclusion: `${aiSummary.verdict}；${
+      hasReviewCandidate
+        ? `${backtestSummary.readyCount} 个候选仅进入人工 Shadow 复核。`
+        : '暂无可复核候选，继续 Shadow 观察。'
+    }`,
+    keyMetrics: [
+      cleanSymbols(symbols).join('、'),
+      `任务 ${backtestSummary.taskCount}`,
+      `谨慎 ${backtestSummary.cautionCount}`,
+      `最佳 ${backtestSummary.topRouteKey}`,
+    ],
+    reasons: [
+      aiSummary.headline,
+      firstBlockedRow ? `主要阻断：${humanBacktestDecision(firstBlockedRow)}` : '',
+    ],
+    nextAction: hasReviewCandidate
+      ? '人工复核最佳候选与阻断证据；不自动升级或执行。'
+      : '继续采集回测样本并复核主要阻断。',
+    timestamp: backtestSummary.generatedAt || aiSummary.generatedAt,
+  });
 }
 
 export async function loadBacktestAiState() {
@@ -252,7 +226,7 @@ export async function runBacktestAiCycle({
   timeframes = DEFAULT_BACKTEST_TIMEFRAMES,
   days = 180,
   maxTasks = 20,
-  sendTelegram = true,
+  sendTelegram = false,
   noDeepseek = false,
 } = {}) {
   const normalizedSymbols = cleanSymbols(symbols);
@@ -264,16 +238,18 @@ export async function runBacktestAiCycle({
   const ai = await postBacktestAiJson('/api/ai-analysis/deepseek-telegram/run', {
     symbols: normalizedSymbols,
     timeframes,
-    send: sendTelegram,
-    force: true,
+    send: false,
+    dryRun: true,
+    force: false,
     noDeepseek,
-    minIntervalSeconds: 0,
+    minIntervalSeconds: 900,
   });
   let notify = null;
   if (sendTelegram) {
     notify = await postBacktestAiJson('/api/notify/test', {
       eventType: 'BACKTEST_AI',
       message: buildBacktestTelegramMessage({ backtest, ai, symbols: normalizedSymbols }),
+      send: true,
       dryRun: false,
     });
   }
@@ -281,6 +257,7 @@ export async function runBacktestAiCycle({
     ok: true,
     generatedAt: new Date().toISOString(),
     symbols: normalizedSymbols,
+    sendTelegramRequested: Boolean(sendTelegram),
     backtest,
     ai,
     notify,

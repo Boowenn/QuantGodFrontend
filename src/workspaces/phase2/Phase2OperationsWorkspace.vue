@@ -137,17 +137,15 @@
             </div>
             <a-alert
               v-if="notifyConfig"
-              :type="notifyConfig.telegramConfigured ? 'success' : 'warning'"
+              :type="notifyAlertType"
               show-icon
-              :message="
-                notifyConfig.telegramConfigured ? 'Telegram 通道已连接' : 'Telegram Token / Chat ID 未配置'
-              "
-              description="AI 推送会复用这个通道；页面不会接收 Telegram 命令。"
+              :message="notifySafety.label"
+              :description="notifySafety.reason"
             />
             <a-alert
               v-if="opsResult"
               class="phase2-alert"
-              :type="opsResult.ok === false ? 'error' : opsResult.dryRun ? 'info' : 'success'"
+              :type="opsAlertType"
               show-icon
               :message="describeOpsStatus(opsResult)"
               :description="describeOpsDetail(opsResult)"
@@ -156,7 +154,7 @@
             <div class="phase2-notify-list">
               <article v-for="row in notifyRows.slice(0, 6)" :key="row.key" class="phase2-notify-item">
                 <strong>{{ formatEventType(row.eventType) }}</strong>
-                <small>{{ row.timestamp || '--' }}</small>
+                <small>{{ formatNotifyTime(row) }}</small>
                 <span>{{ formatNotifyStatus(row) }}</span>
               </article>
               <p v-if="!notifyRows.length" class="phase2-empty">暂无通知历史。</p>
@@ -193,6 +191,11 @@ import {
   tableColumns,
 } from '../../services/phase2Api';
 import { formatDisplayValue, humanizeStatus } from '../../utils/displayText.js';
+import {
+  formatTelegramTimestamp,
+  normalizeTelegramDelivery,
+  normalizeTelegramSafety,
+} from '../../utils/telegramStatus.js';
 
 const groups = [
   { key: 'governance', label: '治理状态', endpoints: PHASE2_ENDPOINTS.governance },
@@ -230,6 +233,12 @@ const summary = computed(() => endpointSummary(payload.value || {}));
 const notifyRows = computed(() =>
   (notifyHistory.value?.items || []).map((row, index) => ({ key: `${index}`, ...row })).reverse(),
 );
+const notifySafety = computed(() =>
+  normalizeTelegramSafety(notifyConfig.value || {}, { requireConfigured: true }),
+);
+const notifyAlertType = computed(() => alertTypeForTone(notifySafety.value.tone));
+const opsDelivery = computed(() => normalizeTelegramDelivery(opsResult.value || {}));
+const opsAlertType = computed(() => alertTypeForTone(opsDelivery.value.tone));
 
 watch(selectedKeys, () => {
   activeEndpoint.value = activeGroup.value.endpoints[0]?.[0] || '';
@@ -264,6 +273,8 @@ async function runAiOps(send) {
     runMt5AiMonitor({
       send,
       dryRun: !send,
+      force: false,
+      minIntervalSeconds: 900,
       symbols: monitorSymbols.value,
       timeframes: monitorTimeframes.value,
     }),
@@ -303,36 +314,40 @@ function formatEventType(value) {
 }
 
 function formatNotifyStatus(row) {
-  if (row?.sent) return '已发送到 Telegram';
-  if (row?.dryRun && row?.ok) return '演练记录，未真实发送';
-  if (row?.error === 'telegram_not_configured') return 'Telegram 未配置';
-  if (row?.error) return formatDisplayValue(row.error);
-  if (row?.ok === false) return '发送失败';
-  return '等待发送结果';
+  return normalizeTelegramDelivery(row).label;
+}
+
+function formatNotifyTime(row) {
+  return formatTelegramTimestamp(row?.timestamp || row?.createdAt || row?.sentAtIso);
 }
 
 function describeOpsStatus(result) {
   if (!result) return '尚未运行';
-  if (result.ok === false) return `运行失败：${formatDisplayValue(result.error || '未知错误')}`;
-  if (result.status === 'sent' || result.sent) return '已推送到 Telegram';
-  if (result.dryRun || result.status === 'dry_run') return '演练完成，未真实推送';
-  if (result.summary?.notifications !== undefined) {
-    return `AI 监控完成，通知 ${result.summary.notifications} 条`;
-  }
-  return '运维闭环已完成';
+  return normalizeTelegramDelivery(result).label;
 }
 
 function describeOpsDetail(result) {
   if (!result) return '';
-  if (result.ok === false) return '请查看后端日志或通知配置，系统不会自动执行交易动作。';
+  const delivery = normalizeTelegramDelivery(result);
+  if (result.ok === false) return delivery.detail;
   const items = Array.isArray(result.items) ? result.items : [];
   const firstItem = items[0] || {};
   const decision = firstItem.decision?.action || firstItem.decision?.recommendation || firstItem.reason;
   const source =
     firstItem.source?.symbol || firstItem.symbol || aiMonitorConfig.value?.defaultSymbols || '全部监听对象';
-  if (decision) return `${source}：${formatDisplayValue(decision, { max: 120 })}`;
-  if (result.record?.messagePreview) return formatDisplayValue(result.record.messagePreview, { max: 140 });
-  return '已写入本地通知记录；Telegram 通道保持 push-only。';
+  if (decision) {
+    return `${delivery.detail} ${source}：${formatDisplayValue(decision, { max: 120 })}`;
+  }
+  if (result.record?.messagePreview) {
+    return `${delivery.detail} ${formatDisplayValue(result.record.messagePreview, { max: 140 })}`;
+  }
+  return delivery.detail;
+}
+
+function alertTypeForTone(tone) {
+  if (tone === 'ok') return 'success';
+  if (tone === 'warn') return 'warning';
+  return 'error';
 }
 
 onMounted(() => {

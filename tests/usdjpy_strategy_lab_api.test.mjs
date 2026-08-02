@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { fetchUSDJPYStrategyLabStatus, runUSDJPYLiveLoop } from '../src/services/usdjpyStrategyLabApi.js';
+import {
+  dispatchUSDJPYTelegramGateway,
+  fetchUSDJPYStrategyLabStatus,
+  runUSDJPYLiveLoop,
+} from '../src/services/usdjpyStrategyLabApi.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -53,4 +57,39 @@ test('USDJPY Strategy Lab commands reject HTTP 200 payloads without ok=true', as
   globalThis.fetch = async () => jsonResponse({ ok: false, error: 'risk_gate_rejected' });
 
   await assert.rejects(runUSDJPYLiveLoop(), /risk_gate_rejected/);
+});
+
+test('USDJPY Telegram Gateway dispatch defaults to preview and requires body double confirmation', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return jsonResponse({ ok: true, sent: false });
+  };
+
+  await dispatchUSDJPYTelegramGateway();
+  await dispatchUSDJPYTelegramGateway({ send: true, limit: 3 });
+
+  assert.deepEqual(
+    calls.map((call) => call.url),
+    [
+      '/api/usdjpy-strategy-lab/telegram-gateway/dispatch',
+      '/api/usdjpy-strategy-lab/telegram-gateway/dispatch',
+    ],
+  );
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    focusSymbol: 'USDJPYc',
+    send: false,
+    dryRun: true,
+    limit: 8,
+  });
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    focusSymbol: 'USDJPYc',
+    send: true,
+    dryRun: false,
+    limit: 3,
+  });
+  assert.equal(
+    calls.every((call) => !call.url.includes('send=1')),
+    true,
+  );
 });
