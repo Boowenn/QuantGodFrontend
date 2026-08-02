@@ -59,7 +59,7 @@
     <div class="qg-mt5-core-operations">
       <LedgerTable title="实时持仓" :rows="positionRows" :limit="10" />
       <LedgerTable title="挂单状态" :rows="orderRows" :limit="10" />
-      <LedgerTable title="主要阻断" :rows="shadowBlockerRows" :limit="3" />
+      <LedgerTable title="研究门禁（不影响账号连接）" :rows="shadowBlockerRows" :limit="3" />
     </div>
 
     <details class="qg-mt5-progressive">
@@ -74,21 +74,18 @@
             <h2>当前账号数据是否可信</h2>
           </header>
           <LedgerTable
-            :title="snapshot.secondaryEnabled ? '双账号只读桥' : '当前账号只读桥'"
+            title="双账号槽位与只读桥"
             :rows="snapshotRecoveryRows"
             :limit="4"
             class="qg-ledger-table--important qg-ledger-table--mt5-full"
           />
         </section>
 
-        <section
-          class="qg-mt5-dual-accounts"
-          :aria-label="snapshot.secondaryEnabled ? 'MT5 双账号 EA 状态' : 'MT5 主账号 EA 状态'"
-        >
+        <section class="qg-mt5-dual-accounts" aria-label="MT5 双账号槽位状态">
           <header class="qg-mt5-dual-accounts__header">
             <div>
               <p class="qg-eyebrow">账户详情</p>
-              <h2>{{ snapshot.secondaryEnabled ? '双账号运行概览' : '主账号运行概览' }}</h2>
+              <h2>双账号槽位概览</h2>
             </div>
             <StatusPill :status="runtimeSummaryStatus" :label="runtimeSummaryLabel" />
           </header>
@@ -220,7 +217,7 @@
             <KeyValueList :items="accountItems" />
           </section>
 
-          <section v-if="snapshot.secondaryEnabled" class="qg-section-card">
+          <section class="qg-section-card">
             <header>
               <p class="qg-eyebrow">第二账号快照</p>
               <h2>第二账号账户快照</h2>
@@ -307,7 +304,6 @@
         <JsonPreview title="连接状态" source="/api/mt5-readonly/status" :payload="state.status" />
         <JsonPreview title="账户信息" source="/api/mt5-readonly/account" :payload="state.account" />
         <JsonPreview
-          v-if="snapshot.secondaryEnabled"
           title="第二账号信息"
           source="/api/mt5-readonly-secondary/account"
           :payload="state.secondaryAccount"
@@ -317,7 +313,6 @@
         <JsonPreview title="品种登记" source="/api/mt5-symbol-registry/symbols" :payload="state.symbols" />
         <JsonPreview title="MT5 快照" source="/api/mt5-readonly/snapshot" :payload="state.snapshot" />
         <JsonPreview
-          v-if="snapshot.secondaryEnabled"
           title="第二 MT5 快照"
           source="/api/mt5-readonly-secondary/snapshot"
           :payload="state.secondarySnapshot"
@@ -369,6 +364,7 @@ import {
   buildSymbolRows,
   buildUsdJpyLiveLoopItems,
   normalizeMt5Snapshot,
+  resolveMt5ReadonlyConnectionSummary,
 } from './mt5Model.js';
 import { buildOperatorOverviewAxisItems, normalizeDashboardSnapshot } from '../dashboard/dashboardModel.js';
 
@@ -416,55 +412,13 @@ const canonicalOverview = computed(() =>
   overviewSnapshot.value.operatorOverviewState?.valid ? overviewSnapshot.value.operatorOverview : null,
 );
 const canonicalMt5 = computed(() => canonicalOverview.value?.mt5 || null);
-const activeConnections = computed(() => snapshot.value.accountConnections || []);
-const readonlyConnectionsHealthy = computed(() => {
-  if (canonicalMt5.value) {
-    return (
-      canonicalMt5.value.writerFresh === true &&
-      canonicalMt5.value.brokerConnectionKnown === true &&
-      canonicalMt5.value.brokerConnected === true &&
-      canonicalMt5.value.accountAuthorizationKnown === true &&
-      canonicalMt5.value.accountAuthorized === true &&
-      canonicalMt5.value.monitorReady === true
-    );
-  }
-  return (
-    activeConnections.value.length > 0 &&
-    activeConnections.value.every(
-      (account) => account.brokerConnected && account.accountAuthorized && account.writerFresh,
-    )
-  );
-});
-const canonicalConnectionUnknown = computed(
-  () =>
-    canonicalMt5.value &&
-    (canonicalMt5.value.brokerConnectionKnown !== true ||
-      canonicalMt5.value.accountAuthorizationKnown !== true),
+const connectionSummary = computed(() =>
+  resolveMt5ReadonlyConnectionSummary(snapshot.value, canonicalMt5.value),
 );
-const readonlyBannerStatus = computed(() =>
-  readonlyConnectionsHealthy.value
-    ? snapshot.value.marketSession === 'MARKET_CLOSED'
-      ? 'warn'
-      : 'ok'
-    : 'blocked',
-);
-const readonlyBannerLabel = computed(() => {
-  if (canonicalConnectionUnknown.value) return 'MT5 连接与授权待确认';
-  if (!readonlyConnectionsHealthy.value) return 'MT5 连接证据不完整';
-  if (snapshot.value.marketSession === 'MARKET_CLOSED') {
-    return '账号已连接 · MARKET_CLOSED';
-  }
-  return snapshot.value.secondaryEnabled ? '已启用账号只读连接正常' : '主账号已连接（只读）';
-});
-const runtimeSummaryStatus = computed(() => (readonlyConnectionsHealthy.value ? 'warn' : 'blocked'));
-const runtimeSummaryLabel = computed(() => {
-  if (canonicalConnectionUnknown.value) return 'Shadow / ReadOnly · 状态待确认';
-  if (!readonlyConnectionsHealthy.value) return 'Shadow / ReadOnly · 连接证据不完整';
-  if (snapshot.value.marketSession === 'MARKET_CLOSED') return 'MARKET_CLOSED · Shadow / ReadOnly';
-  return snapshot.value.secondaryEnabled
-    ? '双账号已连接 · Shadow / ReadOnly'
-    : '主账号已连接 · Shadow / ReadOnly';
-});
+const readonlyBannerStatus = computed(() => connectionSummary.value.bannerStatus);
+const readonlyBannerLabel = computed(() => connectionSummary.value.bannerLabel);
+const runtimeSummaryStatus = computed(() => connectionSummary.value.runtimeStatus);
+const runtimeSummaryLabel = computed(() => connectionSummary.value.runtimeLabel);
 const shadowSummary = computed(() => buildMt5ShadowSummary(snapshot.value));
 const snapshotRootCause = computed(() => buildMt5SnapshotRootCauseBanner(snapshot.value));
 const snapshotRecoveryRows = computed(() => buildMt5SnapshotRecoveryRows(snapshot.value));

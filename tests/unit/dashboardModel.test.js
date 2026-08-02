@@ -320,7 +320,7 @@ describe('Forex-only dashboard model', () => {
     expect(buildDailyTodoRows(raw)).toEqual([]);
   });
 
-  it('uses the aggregate overview as homepage truth while keeping weekend quote closure neutral', () => {
+  it('keeps the raw gate-only BLOCKED truth while presenting healthy weekend monitoring as a warning', () => {
     const overview = operatorOverview({
       operationalReady: false,
       overallStatus: 'BLOCKED',
@@ -335,10 +335,18 @@ describe('Forex-only dashboard model', () => {
     });
     const snapshot = normalizeDashboardSnapshot({ operatorOverview: overview });
     const items = buildOperatorOverviewItems(snapshot);
+    const rootCause = buildSnapshotRootCauseBanner(snapshot);
 
     expect(snapshot.snapshotRecovery.status).toBe('ok');
-    expect(buildSnapshotRootCauseBanner(snapshot)).toMatchObject({ status: 'blocked' });
-    expect(buildSnapshotRootCauseBanner(snapshot).rootCauseLine).toContain('自动化链未就绪');
+    expect(snapshot).toMatchObject({ overallStatus: 'BLOCKED', overallStatusTone: 'blocked' });
+    expect(snapshot.operatorOverviewState).toMatchObject({ code: 'BLOCKED', status: 'blocked' });
+    expect(rootCause).toMatchObject({
+      status: 'warn',
+      label: '系统运行正常 · 研究门禁待恢复',
+      title: '系统运行正常，研究门禁尚未通过',
+    });
+    expect(rootCause.rootCauseLine).toContain('原始 overallStatus=BLOCKED');
+    expect(rootCause.rootCauseLine).toContain('自动化链未就绪');
     expect(items.find((item) => item.label === '券商连接')).toMatchObject({ status: 'ok' });
     expect(items.find((item) => item.label === '报价新鲜度')).toMatchObject({
       value: 'MARKET_CLOSED',
@@ -349,11 +357,42 @@ describe('Forex-only dashboard model', () => {
       status: 'warn',
     });
     expect(buildOperatorOverviewBlockerRows(snapshot)).toHaveLength(2);
+    expect(buildOperatorOverviewBlockerRows(snapshot).every((row) => row.优先级 === 'P1')).toBe(true);
     expect(buildFrontendSnapshotRecoveryRows(snapshot).map((row) => row.修复优先级)).toEqual([
-      'P0',
+      'P1',
       'P2',
       'P2',
     ]);
+    expect(buildFrontendSnapshotRecoveryRows(snapshot)[0].状态).toBe('系统运行正常 / 研究门禁待恢复');
+    expect(buildSnapshotImpactSummary(snapshot)).toMatchObject({
+      status: 'warn',
+      p0Count: 0,
+      p1Count: 1,
+      affectedAreaLine: '系统运行正常；Dashboard 仅显示研究门禁待恢复',
+    });
+  });
+
+  it('keeps runtime MT5 blockers red and P0', () => {
+    const overview = operatorOverview({
+      operationalReady: false,
+      overallStatus: 'BLOCKED',
+      blockedReasons: ['MT5_WRITER_STALE'],
+      mt5: {
+        ...operatorOverview().payload.mt5,
+        writerFresh: false,
+        monitorReady: false,
+      },
+    });
+    const snapshot = normalizeDashboardSnapshot({ operatorOverview: overview });
+
+    expect(buildSnapshotRootCauseBanner(snapshot)).toMatchObject({
+      status: 'blocked',
+      title: '统一运营状态已阻断',
+    });
+    expect(buildOperatorOverviewBlockerRows(snapshot)[0]).toMatchObject({
+      优先级: 'P0',
+      阻断代码: 'MT5_WRITER_STALE',
+    });
   });
 
   it('accepts a valid PASS overview as the aggregate homepage state', () => {

@@ -224,6 +224,43 @@ function operatorBlockedReasons(overview = {}) {
   return Array.isArray(overview.blockedReasons) ? overview.blockedReasons.filter(Boolean) : [];
 }
 
+function operatorResearchGateReason(reason) {
+  const code = String(reason || '').toUpperCase();
+  return code.startsWith('AUTOMATION_') || code.startsWith('EVIDENCE_');
+}
+
+function operatorRuntimeHealthy(overview = {}) {
+  const safety = overview.safety || {};
+  return (
+    overview.service?.processAlive === true &&
+    overview.service?.serviceReady === true &&
+    overview.canonicalDataRoot?.exists === true &&
+    overview.mt5?.writerFresh === true &&
+    overview.mt5?.brokerConnectionKnown === true &&
+    overview.mt5?.brokerConnected === true &&
+    overview.mt5?.accountAuthorizationKnown === true &&
+    overview.mt5?.accountAuthorized === true &&
+    overview.mt5?.monitorReady === true &&
+    overview.mt5?.tradingReady === false &&
+    overview.data?.ready === true &&
+    ['PASS', 'WARN'].includes(String(overview.disk?.status || '').toUpperCase()) &&
+    safety.advisoryOnly === true &&
+    safety.executionLaneExists === false &&
+    safety.orderSendAllowed === false &&
+    safety.closeAllowed === false &&
+    safety.cancelAllowed === false &&
+    safety.liveExpansionAllowed === false &&
+    safety.unattendedLiveExpansionAllowed === false &&
+    safety.operatorApprovalRequired === true &&
+    safety.mutatesMt5 === false
+  );
+}
+
+function operatorHasOnlyResearchGateBlockers(overview = {}) {
+  const reasons = operatorBlockedReasons(overview);
+  return reasons.length > 0 && reasons.every(operatorResearchGateReason) && operatorRuntimeHealthy(overview);
+}
+
 function booleanOverviewItem(label, value, options = {}) {
   const known = options.known ?? typeof value === 'boolean';
   const expected = options.expected ?? true;
@@ -573,14 +610,22 @@ export function buildOperatorOverviewBlockerRows(snapshot = {}) {
   const reasons = operatorBlockedReasons(snapshot.operatorOverview);
   if (!reasons.length && snapshot.overallStatusTone === 'ok') return [];
   return (reasons.length ? reasons : ['OPERATOR_OVERVIEW_WARN']).map((reason) => ({
-    优先级: snapshot.overallStatusTone === 'blocked' ? 'P0' : 'P1',
+    优先级: operatorResearchGateReason(reason)
+      ? 'P1'
+      : snapshot.overallStatusTone === 'blocked'
+        ? 'P0'
+        : 'P1',
     阻断代码: reason,
     说明:
       reason === 'OPERATOR_OVERVIEW_WARN'
         ? '统一运营状态返回 WARN，需要人工复核聚合证据。'
-        : operatorBlockerLabel(reason),
+        : operatorResearchGateReason(reason)
+          ? `研究门禁：${operatorBlockerLabel(reason)}`
+          : operatorBlockerLabel(reason),
     证据端点: '/api/operator/overview',
-    下一步: '按阻断代码恢复对应本地证据，再刷新统一运营总览。',
+    下一步: operatorResearchGateReason(reason)
+      ? '继续保持系统只读运行，并补齐自动化或生产证据后重新评估研究门禁。'
+      : '按阻断代码恢复对应本地证据，再刷新统一运营总览。',
   }));
 }
 
@@ -805,32 +850,46 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
       };
     }
 
-    const tone = snapshot.overallStatusTone || 'blocked';
+    const rawTone = snapshot.overallStatusTone || 'blocked';
     const reasons = operatorBlockedReasons(overview);
     const reasonLine = reasons.map(operatorBlockerLabel).join('；');
     const writerAge = numberOrNull(overview.mt5?.writerAgeSeconds);
+    const researchGateOnly = operatorHasOnlyResearchGateBlockers(overview);
+    const tone = researchGateOnly ? 'warn' : rawTone;
     return {
       status: tone,
-      label: `统一状态 · ${humanizeStatus(overview.overallStatus, overview.overallStatus)}`,
-      title:
-        tone === 'ok'
+      label: researchGateOnly
+        ? '系统运行正常 · 研究门禁待恢复'
+        : `统一状态 · ${humanizeStatus(overview.overallStatus, overview.overallStatus)}`,
+      title: researchGateOnly
+        ? '系统运行正常，研究门禁尚未通过'
+        : tone === 'ok'
           ? '统一运营状态通过（Shadow / ReadOnly）'
           : tone === 'warn'
             ? '统一运营状态需要人工复核'
             : '统一运营状态已阻断',
       rootCauseLine:
-        reasonLine ||
+        (researchGateOnly
+          ? `原始 overallStatus=${overview.overallStatus}；只限制研究/晋级：${reasonLine}`
+          : reasonLine) ||
         (tone === 'ok' ? '服务、MT5 监控、数据、自动化、生产证据与磁盘均已通过。' : '聚合状态为 WARN。'),
-      blockedLine: tone === 'ok' ? '无' : reasonLine || '总体运营就绪度',
-      usableLine: '系统始终保持 Shadow / ReadOnly；详细端点可继续用于只读诊断',
+      blockedLine: researchGateOnly
+        ? '自动化研究结论与生产证据晋级；不影响 MT5 只读监控。'
+        : tone === 'ok'
+          ? '无'
+          : reasonLine || '总体运营就绪度',
+      usableLine: researchGateOnly
+        ? '本地服务、MT5 连接与授权、writer、历史数据及 Shadow / ReadOnly 监控均可继续运行'
+        : '系统始终保持 Shadow / ReadOnly；详细端点可继续用于只读诊断',
       evidenceLine: [
         `生成时间 ${overview.generatedAt || '未知'}`,
         `数据根 ${overview.canonicalDataRoot?.id || '未知'}`,
         writerAge === null ? 'writer 年龄未知' : `writer ${writerAge.toFixed(1)} 秒`,
       ].join('；'),
       recoveryPathLine: '/api/operator/overview',
-      nextAction:
-        tone === 'ok'
+      nextAction: researchGateOnly
+        ? '系统继续只读运行；补齐研究证据后重新评估门禁，不修改原始 overallStatus。'
+        : tone === 'ok'
           ? '继续只读观察；该状态不构成任何实盘执行授权。'
           : '按 blockedReasons 恢复对应本地证据，再刷新统一运营总览。',
     };
@@ -878,9 +937,10 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
 
 export function buildFrontendSnapshotRecoveryRows(snapshot = {}) {
   const mt5Blocked = snapshot.snapshotRecovery?.status !== 'ok';
+  const operatorBanner = buildSnapshotRootCauseBanner(snapshot);
   const dashboardTone = snapshot.operatorOverviewRequested
     ? snapshot.operatorOverviewState?.valid
-      ? snapshot.overallStatusTone
+      ? operatorBanner.status
       : 'blocked'
     : mt5Blocked
       ? 'blocked'
@@ -897,10 +957,17 @@ export function buildFrontendSnapshotRecoveryRows(snapshot = {}) {
         dashboardTone === 'blocked'
           ? '统一运营状态已阻断'
           : dashboardTone === 'warn'
-            ? '统一运营状态待复核'
+            ? operatorHasOnlyResearchGateBlockers(snapshot.operatorOverview)
+              ? '系统运行正常 / 研究门禁待恢复'
+              : '统一运营状态待复核'
             : '只读运营状态可用',
       可信范围: dashboardTone === 'ok' ? '统一只读运营状态' : '诊断明细与历史证据',
-      下一步: dashboardTone === 'ok' ? '继续观察。' : '按 Operator Overview 的 blockedReasons 恢复证据。',
+      下一步:
+        dashboardTone === 'ok'
+          ? '继续观察。'
+          : operatorHasOnlyResearchGateBlockers(snapshot.operatorOverview)
+            ? '保持只读运行并补齐研究门禁证据。'
+            : '按 Operator Overview 的 blockedReasons 恢复证据。',
     },
     {
       前端区域: 'MT5',
@@ -945,7 +1012,9 @@ export function buildSnapshotImpactSummary(snapshot = {}) {
         ? 'Dashboard 总体运营状态受影响；MT5 只读监控仍可复核'
         : 'Dashboard 与 MT5 当前状态受影响'
       : banner.status === 'warn'
-        ? 'Dashboard 总体运营状态需要人工复核'
+        ? operatorHasOnlyResearchGateBlockers(snapshot.operatorOverview)
+          ? '系统运行正常；Dashboard 仅显示研究门禁待恢复'
+          : 'Dashboard 总体运营状态需要人工复核'
         : '当前状态未发现聚合阻断',
     priorityLine: `P0 ${count('P0')} / P1 ${count('P1')} / P2 ${count('P2')}`,
     evidenceLine: banner.evidenceLine,

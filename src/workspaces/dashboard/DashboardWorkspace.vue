@@ -17,7 +17,7 @@
       <StatusPill :status="snapshotRootCause.status" :label="snapshotRootCause.label" />
       <div class="qg-snapshot-root-cause__grid">
         <span>
-          <strong>当前不可直接信任</strong>
+          <strong>当前受限范围</strong>
           {{ snapshotRootCause.blockedLine }}
         </span>
         <span>
@@ -45,10 +45,7 @@
           <p class="qg-eyebrow">核心状态</p>
           <h2>连接与只读就绪</h2>
         </div>
-        <StatusPill
-          :status="snapshot.operatorOverviewState.status"
-          :label="snapshot.operatorOverviewState.label || '核心状态不可用'"
-        />
+        <StatusPill :status="snapshotRootCause.status" :label="snapshotRootCause.label || '核心状态不可用'" />
       </div>
       <div class="qg-overview-core-grid">
         <div>
@@ -56,8 +53,8 @@
           <KeyValueList :items="operatorOverviewAxisItems" />
         </div>
         <div>
-          <p class="qg-section-label">当前阻断与下一步</p>
-          <LedgerTable title="主要阻断" :rows="operatorOverviewBlockerRows" :limit="3" />
+          <p class="qg-section-label">研究门禁与运行阻断</p>
+          <LedgerTable title="门禁与阻断" :rows="operatorOverviewBlockerRows" :limit="3" />
         </div>
       </div>
       <details v-if="operatorOverviewSupportItems.length" class="qg-overview-support">

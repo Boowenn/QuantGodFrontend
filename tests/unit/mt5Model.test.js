@@ -4,6 +4,7 @@ import {
   buildCloseHistoryRows,
   buildEndpointHealth,
   buildMt5AccountCards,
+  buildMt5ConnectionItems,
   buildMt5CoreMetrics,
   buildMt5Metrics,
   buildMt5PrimaryAxisItems,
@@ -17,6 +18,7 @@ import {
   buildMt5SnapshotRootCauseBanner,
   buildMt5EvidenceOsLiteItems,
   buildSafetyItems,
+  buildSecondaryAccountItems,
   buildMt5TodoRows,
   buildMt5ReviewRows,
   buildOrderRows,
@@ -26,6 +28,7 @@ import {
   buildTradeJournalRows,
   buildUnclosedEntryRows,
   normalizeMt5Snapshot,
+  resolveMt5ReadonlyConnectionSummary,
 } from '../../src/workspaces/mt5/mt5Model.js';
 
 const TRUSTED_RUNTIME = Object.freeze({
@@ -108,15 +111,153 @@ describe('mt5Model ledgers', () => {
 
     expect(snapshot.secondaryEnabled).toBe(false);
     expect(snapshot.accountConnections).toHaveLength(1);
-    expect(snapshot.accountProfiles).toHaveLength(1);
-    expect(buildMt5AccountCards(snapshot)).toHaveLength(1);
-    expect(buildMt5Metrics(snapshot).some((item) => item.label === '第二账号 EA')).toBe(false);
-    expect(buildMt5Metrics(snapshot).some((item) => item.label === '第二账号净值')).toBe(false);
-    expect(buildMt5SnapshotRecoveryRows(snapshot)).toHaveLength(1);
+    expect(snapshot.accountSlots).toHaveLength(2);
+    expect(snapshot.accountProfiles).toHaveLength(2);
+    expect(buildMt5AccountCards(snapshot)).toHaveLength(2);
+    expect(buildMt5AccountCards(snapshot)[1]).toMatchObject({
+      role: 'secondary',
+      status: 'warn',
+      statusLabel: '未启用（可选）',
+    });
+    expect(buildMt5Metrics(snapshot).find((item) => item.label === '第二账号 EA')).toMatchObject({
+      value: '未启用（可选）',
+      status: 'warn',
+    });
+    expect(buildMt5Metrics(snapshot).find((item) => item.label === '第二账号净值')).toMatchObject({
+      value: '未启用',
+      status: 'warn',
+    });
+    expect(buildMt5SnapshotRecoveryRows(snapshot)).toHaveLength(2);
+    expect(buildMt5SnapshotRecoveryRows(snapshot)[1]).toMatchObject({
+      状态: '未启用（可选）',
+      可信范围: expect.stringContaining('不参与 active readiness'),
+    });
+    expect(buildSecondaryAccountItems(snapshot)[0]).toMatchObject({
+      label: '槽位状态',
+      value: '未启用（可选）',
+      status: 'warn',
+    });
+    expect(buildMt5ConnectionItems(snapshot).find((item) => item.label === '第二账号状态')).toMatchObject({
+      value: '未启用（可选）',
+      status: 'warn',
+    });
+    expect(
+      resolveMt5ReadonlyConnectionSummary(snapshot, {
+        writerFresh: true,
+        brokerConnectionKnown: true,
+        brokerConnected: true,
+        accountAuthorizationKnown: true,
+        accountAuthorized: true,
+        monitorReady: true,
+      }),
+    ).toMatchObject({
+      healthy: true,
+      secondaryState: 'DISABLED',
+      bannerStatus: 'ok',
+      bannerLabel: '主账号已连接 · 第二账号未启用',
+    });
     expect(buildMt5SnapshotRootCauseBanner(snapshot)).toMatchObject({ status: 'ok' });
     expect(
       buildEndpointHealth(primary).some((item) => item.endpoint.includes('mt5-readonly-secondary')),
     ).toBe(false);
+  });
+
+  it('does not let a healthy canonical primary hide an enabled but disconnected secondary account', () => {
+    const unavailableSecondary = {
+      ok: false,
+      status: 'UNAVAILABLE',
+      snapshotFresh: false,
+      _freshness: {
+        status: 'UNAVAILABLE',
+        fresh: false,
+        stale: false,
+        unavailable: true,
+      },
+    };
+    const raw = withTrustedMt5Connections();
+    raw.secondaryAccount = unavailableSecondary;
+    raw.secondarySnapshot = unavailableSecondary;
+    const snapshot = normalizeMt5Snapshot(raw);
+    const canonicalMt5 = {
+      writerFresh: true,
+      brokerConnectionKnown: true,
+      brokerConnected: true,
+      accountAuthorizationKnown: true,
+      accountAuthorized: true,
+      monitorReady: true,
+    };
+    const summary = resolveMt5ReadonlyConnectionSummary(snapshot, canonicalMt5);
+
+    expect(snapshot.secondaryEnabled).toBe(true);
+    expect(summary).toMatchObject({
+      primaryHealthy: true,
+      secondaryHealthy: false,
+      secondaryState: 'DISCONNECTED',
+      healthy: false,
+      bannerStatus: 'blocked',
+      bannerLabel: '主账号已连接 · 第二账号未连接',
+    });
+  });
+
+  it('reports two independently healthy readonly accounts as connected', () => {
+    const snapshot = normalizeMt5Snapshot(withTrustedMt5Connections());
+    const summary = resolveMt5ReadonlyConnectionSummary(snapshot, {
+      writerFresh: true,
+      brokerConnectionKnown: true,
+      brokerConnected: true,
+      accountAuthorizationKnown: true,
+      accountAuthorized: true,
+      monitorReady: true,
+    });
+
+    expect(snapshot.accountConnections).toHaveLength(2);
+    expect(summary).toMatchObject({
+      primaryHealthy: true,
+      secondaryHealthy: true,
+      secondaryState: 'CONNECTED',
+      healthy: true,
+      bannerStatus: 'ok',
+      bannerLabel: '双账号只读连接正常',
+    });
+  });
+
+  it('distinguishes a fresh secondary writer from successful Broker authorization', () => {
+    const disconnectedSecondary = {
+      ok: true,
+      status: 'ACCOUNT_AVAILABLE_NOT_CONNECTED',
+      snapshotFresh: true,
+      _freshness: { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false },
+      terminal: {
+        connected: false,
+        lastAuthFailure: { reason: 'Invalid account' },
+      },
+      runtime: {
+        ...TRUSTED_RUNTIME,
+        connected: false,
+        terminalConnected: false,
+        accountAuthorized: true,
+        shadowMode: true,
+        readOnlyMode: true,
+      },
+      account: { loginMasked: '••••0002', server: 'SyntheticBroker-Live16' },
+    };
+    const raw = withTrustedMt5Connections();
+    raw.secondaryAccount = disconnectedSecondary;
+    raw.secondarySnapshot = disconnectedSecondary;
+    const snapshot = normalizeMt5Snapshot(raw);
+    const secondaryCard = buildMt5AccountCards(snapshot)[1];
+
+    expect(snapshot.secondaryConnection.login).toBe('••••0002');
+    expect(secondaryCard.statusLabel).toBe('经纪商未连接');
+    expect(secondaryCard.items.find((item) => item.label === '本地身份授权')).toMatchObject({
+      value: '已登记 / Broker 未验证',
+      status: 'blocked',
+    });
+    expect(buildMt5ConnectionItems(snapshot).find((item) => item.label === '第二账号状态')).toMatchObject({
+      value: '已启用 / 未连接',
+      status: 'blocked',
+      hint: expect.stringContaining('Invalid account'),
+    });
   });
 
   it('labels a connected Shadow / ReadOnly account as observation instead of missing permissions', () => {
@@ -242,6 +383,7 @@ describe('mt5Model ledgers', () => {
       tradingReady: false,
     });
     expect(snapshot).toMatchObject({ marketSession: 'MARKET_CLOSED', eaTradeReady: false });
+    expect(buildUsdJpyLiveLoopItems(snapshot).every((item) => item.status === 'warn')).toBe(true);
     expect(rendered).toContain('MARKET_CLOSED');
     expect(rendered).not.toContain('HARD_WIDE');
     expect(rendered).not.toContain('准备完成');
