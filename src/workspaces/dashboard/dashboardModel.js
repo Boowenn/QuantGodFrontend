@@ -293,27 +293,36 @@ function readonlyConnectionState(value = {}) {
     : runtimeConnection;
   const known =
     connection.semantics === 'EXPLICIT_CONNECTION_EVIDENCE_V2' ||
-    ['readReady', 'brokerSessionConnected', 'accountAuthorized'].some(
+    ['readReady', 'brokerSessionConnected', 'accountAuthorized', 'writerFresh', 'processRunning'].some(
       (key) => typeof connection[key] === 'boolean',
     );
-  const readReady =
-    typeof connection.readReady === 'boolean'
-      ? connection.readReady
-      : connection.brokerSessionConnected === true &&
-        connection.accountAuthorized === true &&
-        connection.writerFresh === true &&
-        connection.processRunning !== false;
+  const contradictory =
+    connection.readReady === false ||
+    connection.brokerSessionConnected === false ||
+    connection.accountAuthorized === false ||
+    connection.writerFresh === false ||
+    connection.processRunning === false;
+  const readReady = Boolean(
+    known &&
+    !contradictory &&
+    connection.brokerSessionConnected === true &&
+    connection.accountAuthorized === true &&
+    connection.writerFresh === true &&
+    connection.processRunning === true &&
+    connection.readReady !== false,
+  );
   let label = '连接状态未知';
-  if (known && readReady) label = '只读连接正常';
+  if (!known) label = '连接证据未知';
   else if (known && connection.processRunning === false) label = '终端进程未就绪';
-  else if (known && connection.brokerSessionConnected !== true) label = 'Broker 未连接';
-  else if (known && connection.accountAuthorized !== true) label = '账号未授权';
-  else if (known && connection.writerFresh !== true) label = 'Writer 不新鲜';
-  else if (known) label = '只读连接未就绪';
+  else if (known && connection.brokerSessionConnected === false) label = 'Broker 未连接';
+  else if (known && connection.accountAuthorized === false) label = '账号未授权';
+  else if (known && connection.writerFresh === false) label = 'Writer 不新鲜';
+  else if (readReady) label = '只读连接正常';
+  else label = '连接证据不完整';
   return {
     known,
-    readReady: known && readReady,
-    blocked: known && !readReady,
+    readReady,
+    blocked: !readReady,
     label,
   };
 }
@@ -340,6 +349,19 @@ function recoveryLine(freshness = {}, fallback = '') {
     fallback ||
     '恢复 MT5 只读桥与 EA dashboard writer，再刷新页面。'
   );
+}
+
+function connectionRecoveryLine(connection = {}, scopeLabel = '账号', endpoint = '') {
+  if (connection.label === '终端进程未就绪') {
+    return `恢复${scopeLabel} terminal64/wine 与 EA dashboard writer，再刷新 ${endpoint}。`;
+  }
+  if (connection.label === 'Writer 不新鲜') {
+    return `恢复${scopeLabel} EA dashboard writer 持续刷新，再核对 readReady。`;
+  }
+  if (connection.label === 'Broker 未连接' || connection.label === '账号未授权') {
+    return `恢复${scopeLabel} Broker 登录与账号授权，确认 readReady=true 后刷新 ${endpoint}。`;
+  }
+  return `补齐${scopeLabel} Broker、授权、writer、进程和 readReady 显式证据，再刷新 ${endpoint}。`;
 }
 
 function positionRows(snapshot = {}) {
@@ -408,18 +430,44 @@ export function normalizeDashboardSnapshot(raw = {}) {
   );
   const primaryConnection = readonlyConnectionState(mt5Snapshot);
   const secondaryConnection = readonlyConnectionState(secondaryMt5Snapshot);
+  const primaryApiSucceeded = apiSucceeded(raw.mt5Snapshot);
+  const primaryFreshnessBlocked = freshnessBlocked(primaryDiagnosticFreshness);
+  const primaryExplicitConnectionBlocked =
+    primaryApiSucceeded &&
+    !primaryFreshnessBlocked &&
+    primaryConnection.known &&
+    primaryConnection.readReady !== true;
   const primaryDiagnosticBlocked =
-    !apiSucceeded(raw.mt5Snapshot) ||
-    freshnessBlocked(primaryDiagnosticFreshness) ||
-    primaryConnection.blocked;
+    !primaryApiSucceeded || primaryFreshnessBlocked || primaryConnection.blocked;
   const primaryBlocked = operatorOverviewRequested
-    ? !operatorOverviewState.valid || operatorOverview.mt5?.monitorReady !== true
+    ? !operatorOverviewState.valid ||
+      operatorOverview.mt5?.monitorReady !== true ||
+      primaryExplicitConnectionBlocked
     : primaryDiagnosticBlocked;
+  const secondaryApiBlocked = secondaryEnabled && !transportSucceeded(raw.secondaryMt5Snapshot);
+  const secondaryFreshnessBlocked = secondaryEnabled && freshnessBlocked(secondaryFreshness);
+  const secondaryDomainBlocked = secondaryEnabled && !apiSucceeded(raw.secondaryMt5Snapshot);
+  const secondaryConnectionBlocked = secondaryEnabled && secondaryConnection.blocked;
   const secondaryBlocked =
-    secondaryEnabled &&
-    (!apiSucceeded(raw.secondaryMt5Snapshot) ||
-      freshnessBlocked(secondaryFreshness) ||
-      secondaryConnection.blocked);
+    secondaryApiBlocked || secondaryFreshnessBlocked || secondaryDomainBlocked || secondaryConnectionBlocked;
+  const secondaryBlockReason = secondaryApiBlocked
+    ? '只读接口不可用'
+    : secondaryFreshnessBlocked
+      ? `快照${freshnessStatus(secondaryFreshness)}`
+      : secondaryDomainBlocked
+        ? '只读状态不可用'
+        : secondaryConnectionBlocked
+          ? secondaryConnection.label
+          : '';
+  const secondaryNextAction = secondaryApiBlocked
+    ? '恢复 /api/mt5-readonly-secondary/snapshot 只读接口后重新核对第二账号。'
+    : secondaryFreshnessBlocked
+      ? recoveryLine(secondaryFreshness, '恢复第二账号 EA dashboard writer，再刷新只读快照。')
+      : secondaryDomainBlocked
+        ? '恢复第二账号只读状态端点的业务证据，再刷新页面。'
+        : secondaryConnectionBlocked
+          ? connectionRecoveryLine(secondaryConnection, '第二账号', '/api/mt5-readonly-secondary/snapshot')
+          : '';
   const partiallyAvailable = !primaryBlocked && secondaryBlocked;
   const blocked = primaryBlocked;
   const runtime =
@@ -451,9 +499,11 @@ export function normalizeDashboardSnapshot(raw = {}) {
     overallStatus: operatorOverview.overallStatus || operatorOverviewState.code || '',
     overallStatusLabel: operatorOverviewState.label,
     overallStatusTone: operatorOverviewRequested
-      ? operatorOverviewState.status === 'ok' && partiallyAvailable
-        ? 'warn'
-        : operatorOverviewState.status
+      ? primaryExplicitConnectionBlocked
+        ? 'blocked'
+        : operatorOverviewState.status === 'ok' && partiallyAvailable
+          ? 'warn'
+          : operatorOverviewState.status
       : blocked
         ? 'blocked'
         : partiallyAvailable
@@ -472,10 +522,17 @@ export function normalizeDashboardSnapshot(raw = {}) {
     primaryDiagnosticFreshness,
     secondaryDiagnosticFreshness,
     primaryDiagnosticBlocked,
+    primaryExplicitConnectionBlocked,
     primaryConnection,
     secondaryEnabled,
     primaryBlocked,
     secondaryBlocked,
+    secondaryApiBlocked,
+    secondaryFreshnessBlocked,
+    secondaryDomainBlocked,
+    secondaryConnectionBlocked,
+    secondaryBlockReason,
+    secondaryNextAction,
     secondaryConnection,
     partiallyAvailable,
     runtime,
@@ -664,6 +721,17 @@ export function buildOperatorOverviewBlockerRows(snapshot = {}) {
     ];
   }
   const reasons = operatorBlockedReasons(snapshot.operatorOverview);
+  if (snapshot.primaryExplicitConnectionBlocked) {
+    return [
+      {
+        优先级: 'P0',
+        阻断代码: 'PRIMARY_CONNECTION_EVIDENCE_CONFLICT',
+        说明: `新鲜主账号明细显示${snapshot.primaryConnection?.label || '连接证据冲突'}`,
+        证据端点: '/api/mt5-readonly/snapshot',
+        下一步: '核对主账号 Broker、授权、writer、进程与 readReady 显式证据，再刷新统一总览。',
+      },
+    ];
+  }
   if (!reasons.length && snapshot.overallStatusTone === 'ok') return [];
   return (reasons.length ? reasons : ['OPERATOR_OVERVIEW_WARN']).map((reason) => ({
     优先级: operatorResearchGateReason(reason)
@@ -782,7 +850,8 @@ export function buildEndpointHealth(raw = {}) {
           ? snapshot.secondaryConnection
           : null;
     const connectionBlocked = connection?.blocked === true;
-    const currentStateOk = (!freshness || !freshnessBlocked(freshness)) && !connectionBlocked;
+    const freshnessStateBlocked = Boolean(freshness && freshnessBlocked(freshness));
+    const currentStateOk = !freshnessStateBlocked && !connectionBlocked;
     return {
       label,
       endpoint,
@@ -794,18 +863,18 @@ export function buildEndpointHealth(raw = {}) {
             : 'blocked',
       value: !evidence.transportOk
         ? '接口不可用'
-        : connectionBlocked
-          ? `${connection.label} / 已阻断`
-          : !currentStateOk
-            ? freshnessStatus(freshness)
+        : freshnessStateBlocked
+          ? freshnessStatus(freshness)
+          : connectionBlocked
+            ? `${connection.label} / 已阻断`
             : evidence.status === 'ok'
               ? '正常'
               : evidence.label,
       hint:
-        (connectionBlocked
-          ? '该账号的显式 Broker / 授权 / writer 证据未形成 readReady；不影响健康主账号。'
-          : freshness && !currentStateOk
-            ? recoveryLine(freshness)
+        (freshnessStateBlocked
+          ? recoveryLine(freshness)
+          : connectionBlocked
+            ? connectionRecoveryLine(connection, label, endpoint)
             : '') ||
         payload?._api?.error?.message ||
         payload?.error?.message ||
@@ -936,11 +1005,26 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
       };
     }
 
+    if (snapshot.primaryExplicitConnectionBlocked) {
+      return {
+        status: 'blocked',
+        label: '主账号连接证据冲突',
+        title: '主账号当前只读状态不可确认',
+        rootCauseLine: `统一总览与新鲜主账号明细冲突：${snapshot.primaryConnection?.label || '连接未就绪'}。`,
+        blockedLine: '主账号当前净值、余额、持仓、挂单与权限状态。',
+        usableLine: '历史交易流水、研究证据与第二账号诊断仍可只读复核。',
+        evidenceLine: '/api/operator/overview + /api/mt5-readonly/snapshot',
+        recoveryPathLine: '/vue/?workspace=mt5',
+        nextAction: '核对主账号 Broker、授权、writer、进程与 readReady 显式证据；冲突解除前保持阻断。',
+      };
+    }
+
     const rawTone = snapshot.overallStatusTone || 'blocked';
     const reasons = operatorBlockedReasons(overview);
     const reasonLine = reasons.map(operatorBlockerLabel).join('；');
     const writerAge = numberOrNull(overview.mt5?.writerAgeSeconds);
-    const researchGateOnly = operatorHasOnlyResearchGateBlockers(overview);
+    const researchGateOnly =
+      operatorHasOnlyResearchGateBlockers(overview) && snapshot.primaryBlocked !== true;
     const partialOverview =
       snapshot.partiallyAvailable === true &&
       (snapshot.operatorOverviewState?.status !== 'blocked' || researchGateOnly);
@@ -953,7 +1037,7 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
         : researchGateOnly
           ? '系统运行正常 · 研究门禁待恢复'
           : partialOverview
-            ? '系统部分可用 · 第二账号未连接'
+            ? `系统部分可用 · 第二账号：${snapshot.secondaryBlockReason || '待恢复'}`
             : `统一状态 · ${humanizeStatus(overview.overallStatus, overview.overallStatus)}`,
       title: partialWithResearchGate
         ? '主账号只读监控正常，研究门禁与第二账号需要恢复'
@@ -968,11 +1052,11 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
                 : '统一运营状态已阻断',
       rootCauseLine:
         (partialWithResearchGate
-          ? `原始 overallStatus=${overview.overallStatus}；研究/晋级受限：${reasonLine}；第二账号${snapshot.secondaryConnection?.label || '未连接'}。`
+          ? `原始 overallStatus=${overview.overallStatus}；研究/晋级受限：${reasonLine}；第二账号：${snapshot.secondaryBlockReason || '待恢复'}。`
           : researchGateOnly
             ? `原始 overallStatus=${overview.overallStatus}；只限制研究/晋级：${reasonLine}`
             : partialOverview
-              ? `统一运营与主账号监控正常；第二账号${snapshot.secondaryConnection?.label || '未连接'}。`
+              ? `统一运营与主账号监控正常；第二账号：${snapshot.secondaryBlockReason || '待恢复'}。`
               : reasonLine) ||
         (tone === 'ok' ? '服务、MT5 监控、数据、自动化、生产证据与磁盘均已通过。' : '聚合状态为 WARN。'),
       blockedLine: partialWithResearchGate
@@ -998,11 +1082,11 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
       ].join('；'),
       recoveryPathLine: '/api/operator/overview',
       nextAction: partialWithResearchGate
-        ? '保持主账号只读运行；补齐研究门禁证据，并单独恢复第二账号 Broker 授权后刷新状态。'
+        ? `保持主账号只读运行；补齐研究门禁证据；${snapshot.secondaryNextAction || '单独恢复第二账号后刷新状态。'}`
         : researchGateOnly
           ? '系统继续只读运行；补齐研究证据后重新评估门禁，不修改原始 overallStatus。'
           : partialOverview
-            ? '保持主账号只读运行；单独恢复第二账号 Broker 授权后刷新状态。'
+            ? `保持主账号只读运行；${snapshot.secondaryNextAction || '单独恢复第二账号后刷新状态。'}`
             : tone === 'ok'
               ? '继续只读观察；该状态不构成任何实盘执行授权。'
               : '按 blockedReasons 恢复对应本地证据，再刷新统一运营总览。',
@@ -1029,7 +1113,7 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
     rootCauseLine: blocked
       ? blockers.join('；') || '只读快照证据缺失'
       : partiallyAvailable
-        ? `主账号只读证据正常；第二账号${snapshot.secondaryConnection?.label || '状态不可确认'}。`
+        ? `主账号只读证据正常；第二账号：${snapshot.secondaryBlockReason || '状态不可确认'}。`
         : snapshot.secondaryEnabled
           ? '两个外汇账号快照均明确 fresh=true。'
           : '当前启用的主账号快照明确 fresh=true；第二账号未启用（可选）。',
@@ -1060,7 +1144,7 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
           ),
         ].join('；')
       : partiallyAvailable
-        ? '保持主账号只读运行；单独恢复第二账号 Broker 授权后刷新状态。'
+        ? `保持主账号只读运行；${snapshot.secondaryNextAction || '单独恢复第二账号后刷新状态。'}`
         : '继续只读观察 USDJPY 守门状态。',
   };
 }
@@ -1070,7 +1154,8 @@ export function buildFrontendSnapshotRecoveryRows(snapshot = {}) {
   const mt5Blocked = mt5Tone === 'blocked';
   const mt5Partial = mt5Tone === 'warn';
   const operatorBanner = buildSnapshotRootCauseBanner(snapshot);
-  const researchGateOnly = operatorHasOnlyResearchGateBlockers(snapshot.operatorOverview);
+  const researchGateOnly =
+    operatorHasOnlyResearchGateBlockers(snapshot.operatorOverview) && snapshot.primaryBlocked !== true;
   const partialWithResearchGate = snapshot.partiallyAvailable && researchGateOnly;
   const dashboardTone = snapshot.operatorOverviewRequested
     ? snapshot.operatorOverviewState?.valid
@@ -1109,9 +1194,9 @@ export function buildFrontendSnapshotRecoveryRows(snapshot = {}) {
         dashboardTone === 'ok'
           ? '继续观察。'
           : partialWithResearchGate
-            ? '保持主账号只读运行；补齐研究门禁，并单独恢复第二账号 Broker 授权。'
+            ? `保持主账号只读运行并补齐研究门禁；${snapshot.secondaryNextAction || '单独恢复第二账号。'}`
             : snapshot.partiallyAvailable
-              ? '保持主账号只读运行；单独恢复第二账号 Broker 授权。'
+              ? `保持主账号只读运行；${snapshot.secondaryNextAction || '单独恢复第二账号。'}`
               : researchGateOnly
                 ? '保持只读运行并补齐研究门禁证据。'
                 : '按 Operator Overview 的 blockedReasons 恢复证据。',
@@ -1134,7 +1219,7 @@ export function buildFrontendSnapshotRecoveryRows(snapshot = {}) {
       下一步: mt5Blocked
         ? '恢复终端、EA dashboard writer 与只读桥。'
         : mt5Partial
-          ? '保持主账号只读运行；单独恢复第二账号 Broker 授权。'
+          ? `保持主账号只读运行；${snapshot.secondaryNextAction || '单独恢复第二账号。'}`
           : '继续核对守门状态。',
     },
     {
@@ -1165,11 +1250,14 @@ export function buildSnapshotImpactSummary(snapshot = {}) {
         ? 'Dashboard 总体运营状态受影响；MT5 只读监控仍可复核'
         : 'Dashboard 与 MT5 当前状态受影响'
       : banner.status === 'warn'
-        ? snapshot.partiallyAvailable && operatorHasOnlyResearchGateBlockers(snapshot.operatorOverview)
+        ? snapshot.partiallyAvailable &&
+          operatorHasOnlyResearchGateBlockers(snapshot.operatorOverview) &&
+          snapshot.primaryBlocked !== true
           ? '主账号只读监控正常；研究门禁与第二账号需要恢复'
           : snapshot.partiallyAvailable
             ? '主账号只读监控正常；仅第二账号需要恢复'
-            : operatorHasOnlyResearchGateBlockers(snapshot.operatorOverview)
+            : operatorHasOnlyResearchGateBlockers(snapshot.operatorOverview) &&
+                snapshot.primaryBlocked !== true
               ? '系统运行正常；Dashboard 仅显示研究门禁待恢复'
               : 'Dashboard 总体运营状态需要人工复核'
         : '当前状态未发现聚合阻断',

@@ -219,14 +219,14 @@ function formatAccountWithCurrency(value, currency = 'USC') {
 
 function staleAwareAccountItem(label, value, currency, snapshotState = {}) {
   const formatted = formatAccountWithCurrency(value, currency);
-  if (!snapshotState.stale && !snapshotState.unconfirmed) {
+  if (!snapshotState.blocked && !snapshotState.stale && !snapshotState.unconfirmed) {
     return { label, value: formatted };
   }
   const historicalHint = formatted === '—' ? '' : `历史${label}: ${formatted}，仅作参考`;
   return {
     label,
-    value: snapshotState.stale ? '快照过期' : '待确认',
-    status: 'warn',
+    value: snapshotState.blocked ? '不可确认' : snapshotState.stale ? '快照过期' : '待确认',
+    status: snapshotState.blocked ? 'blocked' : 'warn',
     hint: [snapshotState.hint, historicalHint].filter(Boolean).join('；'),
   };
 }
@@ -805,6 +805,7 @@ function mt5ConnectionFromPayload(accountPayload, snapshotPayload = {}, options 
     connectionState.accountAuthorized,
     runtime.accountAuthorized,
   );
+  const readReadySignal = firstExplicitBoolean(connectionState.readReady, runtime.readReady);
   const accountAuthorized =
     authorizationSignal ??
     Boolean(
@@ -818,6 +819,35 @@ function mt5ConnectionFromPayload(accountPayload, snapshotPayload = {}, options 
     freshness.fresh === true &&
     !freshnessBlocksCurrentState(freshness),
   );
+  const processRunning =
+    processRunningSignal ??
+    (hostProcess.terminalProcessDetected === true
+      ? true
+      : hostProcess.terminalProcessDetected === false
+        ? false
+        : null);
+  const connectionEvidenceKnown = Boolean(
+    String(connectionState.semantics || runtime.connectionSemantics || '').toUpperCase() ===
+      'EXPLICIT_CONNECTION_EVIDENCE_V2' ||
+    readReadySignal !== null ||
+    brokerConnectionSignal !== null ||
+    authorizationSignal !== null ||
+    ['CONNECTED', 'AUTHORIZED'].includes(status) ||
+    ['CONNECTED', 'AUTHORIZED'].includes(terminalStatus),
+  );
+  const explicitConnectionFailure =
+    readReadySignal === false ||
+    brokerConnectionSignal === false ||
+    authorizationSignal === false ||
+    writerFreshSignal === false ||
+    processRunningSignal === false;
+  const readReady =
+    !explicitConnectionFailure &&
+    brokerConnected &&
+    accountAuthorized &&
+    writerFresh &&
+    processRunning === true &&
+    readReadySignal !== false;
   const marketSession = resolveMt5MarketSession(source, snapshotEnvelope, accountEnvelope);
   const quoteFresh = quoteFreshFromPayload(source, runtime, market, marketSession);
   const connected = brokerConnected && accountAuthorized;
@@ -839,13 +869,10 @@ function mt5ConnectionFromPayload(accountPayload, snapshotPayload = {}, options 
     accountIdentityPresent,
     accountAuthorized,
     writerFresh,
-    processRunning:
-      processRunningSignal ??
-      (hostProcess.terminalProcessDetected === true
-        ? true
-        : hostProcess.terminalProcessDetected === false
-          ? false
-          : null),
+    processRunning,
+    connectionEvidenceKnown,
+    connectionSemantics: connectionState.semantics || runtime.connectionSemantics || '',
+    readReady: connectionEvidenceKnown ? readReady : null,
     quoteFresh,
     marketSession,
     tradingReady: false,
@@ -1316,8 +1343,13 @@ function accountCard(account = {}, fallback = {}) {
   const latestUnconfirmed = Boolean(latestFreshness && freshnessUnconfirmed(latestFreshness));
   const accountSnapshotStale = latestStale || account.snapshotFresh === false;
   const accountSnapshotUnconfirmed = !accountSnapshotStale && latestUnconfirmed;
+  const connectionBlock = accountConnectionBlockState(account);
+  const connectionBlocksVisibleState =
+    connectionBlock.blocked && !accountSnapshotStale && !accountSnapshotUnconfirmed;
   const currentStateTrusted =
     account.ok === true &&
+    account.connectionEvidenceKnown === true &&
+    account.readReady === true &&
     account.brokerConnected === true &&
     account.accountAuthorized === true &&
     account.writerFresh === true &&
@@ -1327,6 +1359,9 @@ function accountCard(account = {}, fallback = {}) {
     account.snapshotFresh === true;
   const freshnessHint = latestFreshness ? freshnessRecoveryHint(latestFreshness) : '';
   const accountSnapshotHint = freshnessHint || account.timestamp || account.sourceFile || '等待 MT5 快照刷新';
+  const currentStateHint = connectionBlocksVisibleState
+    ? `${connectionBlock.state}；该账号当前持仓、净值与余额不可确认，历史值仅作参考。`
+    : accountSnapshotHint;
   const positions = Array.isArray(fallback.positions) ? fallback.positions : [];
   const positionHint = positions.length
     ? positions
@@ -1387,23 +1422,34 @@ function accountCard(account = {}, fallback = {}) {
         : []),
       {
         label: '当前持仓',
-        value: accountSnapshotStale
-          ? '不可确认'
-          : accountSnapshotUnconfirmed
-            ? '待确认'
-            : `${positions.length} 笔`,
-        status: accountSnapshotStale || accountSnapshotUnconfirmed || positions.length ? 'warn' : 'ok',
-        hint: accountSnapshotStale || accountSnapshotUnconfirmed ? stalePositionHint : positionHint,
+        value:
+          connectionBlocksVisibleState || accountSnapshotStale
+            ? '不可确认'
+            : accountSnapshotUnconfirmed
+              ? '待确认'
+              : `${positions.length} 笔`,
+        status: connectionBlocksVisibleState
+          ? 'blocked'
+          : accountSnapshotStale || accountSnapshotUnconfirmed || positions.length
+            ? 'warn'
+            : 'ok',
+        hint: connectionBlocksVisibleState
+          ? [currentStateHint, stalePositionHint].filter(Boolean).join('；')
+          : accountSnapshotStale || accountSnapshotUnconfirmed
+            ? stalePositionHint
+            : positionHint,
       },
       staleAwareAccountItem('净值', account.equity, account.currency, {
+        blocked: connectionBlocksVisibleState,
         stale: accountSnapshotStale,
         unconfirmed: accountSnapshotUnconfirmed,
-        hint: accountSnapshotHint,
+        hint: currentStateHint,
       }),
       staleAwareAccountItem('余额', account.balance, account.currency, {
+        blocked: connectionBlocksVisibleState,
         stale: accountSnapshotStale,
         unconfirmed: accountSnapshotUnconfirmed,
-        hint: accountSnapshotHint,
+        hint: currentStateHint,
       }),
       {
         label: '交易品种',
@@ -1926,15 +1972,27 @@ export function buildMt5Metrics(snapshot) {
   const secondaryFreshness = present(secondary.freshness)
     ? secondary.freshness
     : snapshot.secondaryMt5Freshness;
+  const primaryConnectionBlock = accountConnectionBlockState(primary);
+  const secondaryConnectionBlock = accountConnectionBlockState(secondary);
+  const primaryStale = freshnessStale(primaryFreshness || {});
+  const primaryUnconfirmed = freshnessUnconfirmed(primaryFreshness || {});
+  const secondaryStale = freshnessStale(secondaryFreshness || {});
+  const secondaryUnconfirmed = freshnessUnconfirmed(secondaryFreshness || {});
   const primarySnapshotState = {
-    stale: freshnessStale(primaryFreshness || {}),
-    unconfirmed: freshnessUnconfirmed(primaryFreshness || {}),
-    hint: freshnessRecoveryHint(primaryFreshness || {}, ''),
+    blocked: primaryConnectionBlock.blocked && !primaryStale && !primaryUnconfirmed,
+    stale: primaryStale,
+    unconfirmed: primaryUnconfirmed,
+    hint: primaryConnectionBlock.blocked
+      ? `主账号：${primaryConnectionBlock.state}，当前净值不可确认。`
+      : freshnessRecoveryHint(primaryFreshness || {}, ''),
   };
   const secondarySnapshotState = {
-    stale: freshnessStale(secondaryFreshness || {}),
-    unconfirmed: freshnessUnconfirmed(secondaryFreshness || {}),
-    hint: freshnessRecoveryHint(secondaryFreshness || {}, ''),
+    blocked: secondaryConnectionBlock.blocked && !secondaryStale && !secondaryUnconfirmed,
+    stale: secondaryStale,
+    unconfirmed: secondaryUnconfirmed,
+    hint: secondaryConnectionBlock.blocked
+      ? `第二账号：${secondaryConnectionBlock.state}，当前净值不可确认。`
+      : freshnessRecoveryHint(secondaryFreshness || {}, ''),
   };
   const primaryEquity = staleAwareAccountItem(
     '主账号净值',
@@ -1951,6 +2009,7 @@ export function buildMt5Metrics(snapshot) {
   const secondaryDisabled = accountSlotDisabled(secondary);
   const positionsCount = snapshot.positions.length;
   const combinedSnapshotState = {
+    blocked: primarySnapshotState.blocked || (snapshot.secondaryEnabled && secondarySnapshotState.blocked),
     stale: primarySnapshotState.stale || (snapshot.secondaryEnabled && secondarySnapshotState.stale),
     unconfirmed:
       primarySnapshotState.unconfirmed || (snapshot.secondaryEnabled && secondarySnapshotState.unconfirmed),
@@ -1959,11 +2018,11 @@ export function buildMt5Metrics(snapshot) {
       .join('；'),
   };
   const positionsMetric =
-    combinedSnapshotState.stale || combinedSnapshotState.unconfirmed
+    combinedSnapshotState.blocked || combinedSnapshotState.stale || combinedSnapshotState.unconfirmed
       ? {
           label: '当前持仓',
-          value: combinedSnapshotState.stale ? '不可确认' : '待确认',
-          status: 'warn',
+          value: combinedSnapshotState.blocked || combinedSnapshotState.stale ? '不可确认' : '待确认',
+          status: combinedSnapshotState.blocked ? 'blocked' : 'warn',
           hint: [combinedSnapshotState.hint, `旧快照持仓 ${positionsCount} 笔，仅作历史参考`]
             .filter(Boolean)
             .join('；'),
@@ -1999,7 +2058,7 @@ export function buildMt5Metrics(snapshot) {
     {
       label: 'RSI Shadow 路线',
       value:
-        combinedSnapshotState.stale || combinedSnapshotState.unconfirmed
+        combinedSnapshotState.blocked || combinedSnapshotState.stale || combinedSnapshotState.unconfirmed
           ? '不可用 / 已阻断'
           : snapshot.marketSession === 'MARKET_CLOSED'
             ? 'MARKET_CLOSED / 只读观察'
@@ -2007,7 +2066,7 @@ export function buildMt5Metrics(snapshot) {
               ? '策略证据已加载'
               : '未开启',
       status:
-        combinedSnapshotState.stale || combinedSnapshotState.unconfirmed
+        combinedSnapshotState.blocked || combinedSnapshotState.stale || combinedSnapshotState.unconfirmed
           ? 'blocked'
           : snapshot.marketSession === 'MARKET_CLOSED'
             ? 'warn'
@@ -2015,31 +2074,62 @@ export function buildMt5Metrics(snapshot) {
               ? 'ok'
               : 'warn',
       hint:
-        combinedSnapshotState.stale || combinedSnapshotState.unconfirmed
+        combinedSnapshotState.blocked || combinedSnapshotState.stale || combinedSnapshotState.unconfirmed
           ? combinedSnapshotState.hint
           : snapshot.rsiRoute?.reason || '只以后端当前路线证据为准。',
     },
   ];
 }
 
+function accountConnectionBlockState(account = {}) {
+  if (accountSlotDisabled(account)) return { blocked: false, state: '' };
+  if (account.connectionEvidenceKnown !== true) return { blocked: true, state: '连接证据未知' };
+  if (account.processRunning !== true) {
+    return {
+      blocked: true,
+      state: account.processRunning === false ? '终端进程未就绪' : '终端进程证据未知',
+    };
+  }
+  if (account.brokerConnected !== true) return { blocked: true, state: 'Broker 未连接' };
+  if (account.accountAuthorized !== true) return { blocked: true, state: '账号未授权' };
+  if (account.writerFresh !== true) return { blocked: true, state: 'Writer 不新鲜' };
+  if (account.readReady !== true) return { blocked: true, state: '只读连接未就绪' };
+  return { blocked: false, state: '' };
+}
+
 export function buildMt5CoreMetrics(snapshot = {}) {
   const primary = snapshot.primaryConnection || snapshot;
+  const secondary = snapshot.secondaryConnection || {};
   const primaryFreshness = present(primary.freshness) ? primary.freshness : snapshot.latestFreshness;
-  const secondaryFreshness = snapshot.secondaryConnection?.freshness || snapshot.secondaryMt5Freshness;
+  const secondaryFreshness = secondary.freshness || snapshot.secondaryMt5Freshness;
+  const primaryConnectionBlock = accountConnectionBlockState(primary);
+  const secondaryConnectionBlock = accountConnectionBlockState(secondary);
   const primaryBlocked =
-    freshnessStale(primaryFreshness || {}) || freshnessUnconfirmed(primaryFreshness || {});
+    primaryConnectionBlock.blocked ||
+    freshnessStale(primaryFreshness || {}) ||
+    freshnessUnconfirmed(primaryFreshness || {});
   const secondaryBlocked =
     snapshot.secondaryEnabled &&
-    (freshnessStale(secondaryFreshness || {}) || freshnessUnconfirmed(secondaryFreshness || {}));
+    (secondaryConnectionBlock.blocked ||
+      freshnessStale(secondaryFreshness || {}) ||
+      freshnessUnconfirmed(secondaryFreshness || {}));
   const currentCountsTrusted = !primaryBlocked && !secondaryBlocked;
+  const currentCountsHint = primaryConnectionBlock.blocked
+    ? `主账号：${primaryConnectionBlock.state}，当前合计不可确认。`
+    : secondaryConnectionBlock.blocked
+      ? `第二账号：${secondaryConnectionBlock.state}，双账号持仓与挂单合计不可确认；主账号账户数值仍可单独复核。`
+      : '快照过期或未确认，不能把旧数据当作当前状态。';
   const balance = staleAwareAccountItem(
     '余额',
     primary.balance ?? snapshot.balance,
     primary.currency ?? snapshot.currency,
     {
+      blocked: primaryConnectionBlock.blocked,
       stale: freshnessStale(primaryFreshness || {}),
       unconfirmed: freshnessUnconfirmed(primaryFreshness || {}),
-      hint: freshnessRecoveryHint(primaryFreshness || {}, ''),
+      hint: primaryConnectionBlock.blocked
+        ? `主账号：${primaryConnectionBlock.state}，当前余额不可确认。`
+        : freshnessRecoveryHint(primaryFreshness || {}, ''),
     },
   );
   const equity = buildMt5Metrics(snapshot).find((item) => item.label === '主账号净值') || {
@@ -2061,13 +2151,13 @@ export function buildMt5CoreMetrics(snapshot = {}) {
       label: '持仓',
       value: currentCountsTrusted ? snapshot.positions?.length || 0 : '不可确认',
       status: currentCountsTrusted ? 'ok' : 'blocked',
-      hint: currentCountsTrusted ? '只读当前持仓' : '快照过期或未确认，不能把旧数据当作当前状态。',
+      hint: currentCountsTrusted ? '只读当前持仓' : currentCountsHint,
     },
     {
       label: '挂单',
       value: currentCountsTrusted ? snapshot.orders?.length || 0 : '不可确认',
       status: currentCountsTrusted ? 'ok' : 'blocked',
-      hint: currentCountsTrusted ? '只读当前挂单' : '快照过期或未确认，不能把旧数据当作当前状态。',
+      hint: currentCountsTrusted ? '只读当前挂单' : currentCountsHint,
     },
   ];
 }
@@ -2079,6 +2169,21 @@ function accountRecoveryEndpoint(account = {}) {
 function accountRecoveryLabel(account = {}) {
   const server = account.server ? ` / ${account.server}` : '';
   return `${account.label || (account.role === 'secondary' ? '第二账号' : '主账号')}${server}`;
+}
+
+function accountConnectionRecoveryStep(account = {}, state = '') {
+  const scope = account.role === 'secondary' ? '第二账号' : '主账号';
+  const endpoint = accountRecoveryEndpoint(account);
+  if (state === '终端进程未就绪') {
+    return `恢复${scope} terminal64/wine 进程与 EA dashboard writer，再刷新 ${endpoint}。`;
+  }
+  if (state === 'Writer 不新鲜') {
+    return `恢复${scope} EA dashboard writer 持续刷新，再确认 readReady=true。`;
+  }
+  if (state === 'Broker 未连接' || state === '账号未授权') {
+    return `恢复${scope} Broker 登录与授权，确认 readReady=true 后刷新 ${endpoint}。`;
+  }
+  return `补齐${scope} Broker、授权、writer、进程与 readReady 显式证据，再刷新 ${endpoint}。`;
 }
 
 function accountRecoveryRow(account = {}) {
@@ -2103,7 +2208,13 @@ function accountRecoveryRow(account = {}) {
   const unavailable = freshnessUnavailable(freshness);
   const stale = freshnessStale(freshness);
   const unconfirmed = freshnessUnconfirmed(freshness);
-  const status = processMissing || missing || unavailable || stale ? 'blocked' : unconfirmed ? 'warn' : 'ok';
+  const connectionBlock = accountConnectionBlockState(account);
+  const status =
+    processMissing || missing || unavailable || stale || connectionBlock.blocked
+      ? 'blocked'
+      : unconfirmed
+        ? 'warn'
+        : 'ok';
   const state = processMissing
     ? 'writer 未运行'
     : missing
@@ -2112,11 +2223,13 @@ function accountRecoveryRow(account = {}) {
         ? '只读桥不可用'
         : stale
           ? '快照过期'
-          : unconfirmed
-            ? '快照待确认'
-            : freshness.fresh
-              ? '新鲜'
-              : '待同步';
+          : connectionBlock.blocked
+            ? connectionBlock.state
+            : unconfirmed
+              ? '快照待确认'
+              : freshness.fresh
+                ? '新鲜'
+                : '待同步';
   const nextStep = processMissing
     ? [
         account.hostProcessLine || '未检测到 terminal64/wine 进程',
@@ -2127,13 +2240,18 @@ function accountRecoveryRow(account = {}) {
       ]
         .filter(Boolean)
         .join('；')
-    : freshnessRecoveryHint(freshness, '等待只读桥返回 MT5 dashboard 新鲜度证据，再判断当前账号状态。');
+    : missing || unavailable || stale || unconfirmed
+      ? freshnessRecoveryHint(freshness, '等待只读桥返回 MT5 dashboard 新鲜度证据，再判断当前账号状态。')
+      : connectionBlock.blocked
+        ? accountConnectionRecoveryStep(account, connectionBlock.state)
+        : freshnessRecoveryHint(freshness, '等待只读桥返回 MT5 dashboard 新鲜度证据，再判断当前账号状态。');
   return {
     account,
     status,
     state,
     processMissing,
-    blocksCurrentState: processMissing || freshnessBlocksCurrentState(freshness),
+    connectionBlocked: connectionBlock.blocked,
+    blocksCurrentState: processMissing || freshnessBlocksCurrentState(freshness) || connectionBlock.blocked,
     endpoint: accountRecoveryEndpoint(account),
     evidenceLine: `${accountRecoveryLabel(account)}：${state}，${freshnessAgeLine(freshness)}`,
     processLine:
@@ -2161,7 +2279,7 @@ export function buildMt5SnapshotRecoveryRows(snapshot = {}) {
           : '可把只读桥快照作为当前账号状态。',
       验收标准: disabled
         ? '保持可选未启用，或启用后提供独立 fresh=true writer。'
-        : '对应只读桥 fresh=true，且 terminal64/wine 进程被检测到。',
+        : '对应只读桥 fresh=true、terminal64/wine 进程已检测，且 Broker 已连接、账号已授权、readReady=true。',
       下一步: recovery.nextStep,
     };
   });
@@ -2170,35 +2288,60 @@ export function buildMt5SnapshotRecoveryRows(snapshot = {}) {
 export function buildMt5SnapshotRootCauseBanner(snapshot = {}) {
   const displayRows = (snapshot.accountSlots || snapshot.accountConnections || []).map(accountRecoveryRow);
   const activeRows = (snapshot.accountConnections || []).map(accountRecoveryRow);
+  const primaryRow = activeRows.find((row) => row.account.role === 'primary') || activeRows[0];
+  const secondaryRow = activeRows.find((row) => row.account.role === 'secondary');
+  const primaryBlocked = primaryRow?.blocksCurrentState === true;
+  const secondaryBlocked = secondaryRow?.blocksCurrentState === true;
   const blockers = activeRows.filter((row) => row.blocksCurrentState);
-  const processMissing = blockers.some((row) => row.processMissing);
-  const status = blockers.length ? 'blocked' : 'ok';
-  const label = processMissing ? 'MT5/EA writer 未运行' : blockers.length ? '实时快照不可用' : '实时快照新鲜';
-  const rootCauseLine = blockers.length
+  const partiallyAvailable = !primaryBlocked && secondaryBlocked;
+  const secondaryDisconnected = ['Broker 未连接', '账号未授权'].includes(secondaryRow?.state);
+  const status = primaryBlocked ? 'blocked' : partiallyAvailable ? 'warn' : 'ok';
+  const label = primaryBlocked
+    ? primaryRow?.processMissing
+      ? 'MT5/EA writer 未运行'
+      : '主账号当前状态已阻断'
+    : partiallyAvailable
+      ? secondaryDisconnected
+        ? '主账号可复核 · 第二账号未连接'
+        : `主账号可复核 · 第二账号：${secondaryRow?.state || '状态待恢复'}`
+      : '实时快照新鲜';
+  const rootCauseLine = primaryBlocked
     ? blockers.map((row) => `${accountRecoveryLabel(row.account)}：${row.state}`).join(' / ')
-    : snapshot.secondaryEnabled
-      ? 'Live12 与 Live16 当前快照没有 freshness 阻断。'
-      : '当前启用的主账号快照没有 freshness 阻断；第二账号未启用（可选）。';
+    : partiallyAvailable
+      ? `主账号当前只读状态可复核；第二账号：${secondaryRow.state}；该账号当前状态不可用。`
+      : snapshot.secondaryEnabled
+        ? 'Live12 与 Live16 当前快照、Broker 连接及账号授权均可用于只读复核。'
+        : '当前启用的主账号快照没有状态阻断；第二账号未启用（可选）。';
   const evidenceLine = displayRows.length
     ? displayRows.map((row) => row.evidenceLine).join('；')
     : snapshot.secondaryEnabled
       ? '等待 Live12 / Live16 freshness 证据'
       : '等待主账号 freshness 证据';
-  const nextAction =
-    blockers[0]?.nextStep ||
-    (snapshot.secondaryEnabled
-      ? '保持 Live12/Live16 MT5 终端和 EA dashboard writer 正常刷新，前端继续只读观察。'
-      : '保持当前主账号 MT5 终端和 EA dashboard writer 正常刷新，前端继续只读观察。');
+  const nextAction = primaryBlocked
+    ? primaryRow?.nextStep || blockers[0]?.nextStep
+    : partiallyAvailable
+      ? `${secondaryRow.nextStep} 主账号继续保持 Shadow / ReadOnly 观察。`
+      : snapshot.secondaryEnabled
+        ? '保持 Live12/Live16 MT5 终端和 EA dashboard writer 正常刷新，前端继续只读观察。'
+        : '保持当前主账号 MT5 终端和 EA dashboard writer 正常刷新，前端继续只读观察。';
   return {
     status,
     label,
-    title: blockers.length ? 'MT5 当前账号快照不能当作实时状态' : 'MT5 当前账号快照可用于只读观察',
+    title: primaryBlocked
+      ? 'MT5 当前账号快照不能当作实时状态'
+      : partiallyAvailable
+        ? '主账号可用于只读复核，第二账号当前不可确认'
+        : 'MT5 当前账号快照可用于只读观察',
     rootCauseLine,
     evidenceLine,
-    blockedLine: blockers.length
+    blockedLine: primaryBlocked
       ? '净值、余额、当前持仓、挂单、后端权限和执行准备度。'
-      : '无当前账号状态阻断。',
-    usableLine: '历史交易流水、close history、shadow 账本、Evidence OS、RSI 诊断和研究证据仍可只读复核。',
+      : partiallyAvailable
+        ? '仅第二账号的当前净值、余额、持仓、挂单、权限及双账号合计；主账号单独状态不受影响。'
+        : '无当前账号状态阻断。',
+    usableLine: partiallyAvailable
+      ? '主账号余额、净值与其只读状态可继续复核；历史交易流水、shadow 账本、Evidence OS、RSI 诊断和研究证据仍可使用。'
+      : '历史交易流水、close history、shadow 账本、Evidence OS、RSI 诊断和研究证据仍可只读复核。',
     nextAction,
   };
 }
@@ -3239,7 +3382,12 @@ export function buildMt5AccountCards(snapshot) {
 
 function readonlyAccountHealthy(account = {}) {
   return (
-    account.brokerConnected === true && account.accountAuthorized === true && account.writerFresh === true
+    account.connectionEvidenceKnown === true &&
+    account.readReady === true &&
+    account.brokerConnected === true &&
+    account.accountAuthorized === true &&
+    account.writerFresh === true &&
+    account.processRunning === true
   );
 }
 

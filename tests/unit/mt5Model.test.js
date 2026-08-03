@@ -32,6 +32,7 @@ import {
 } from '../../src/workspaces/mt5/mt5Model.js';
 
 const TRUSTED_RUNTIME = Object.freeze({
+  processRunning: true,
   gmtTime: '2026.07.30 12:00:00',
   tickAgeSeconds: 2,
   executionEnabled: true,
@@ -222,6 +223,11 @@ describe('mt5Model ledgers', () => {
       bannerStatus: 'ok',
       bannerLabel: '双账号只读连接正常',
     });
+    expect(buildMt5SnapshotRootCauseBanner(snapshot)).toMatchObject({
+      status: 'ok',
+      label: '实时快照新鲜',
+      title: 'MT5 当前账号快照可用于只读观察',
+    });
   });
 
   it('distinguishes a fresh secondary writer from successful Broker authorization', () => {
@@ -235,11 +241,13 @@ describe('mt5Model ledgers', () => {
         lastAuthFailure: { reason: 'Invalid account' },
       },
       connection: {
+        semantics: 'EXPLICIT_CONNECTION_EVIDENCE_V2',
         accountIdentityPresent: true,
         brokerSessionConnected: false,
         accountAuthorized: false,
         writerFresh: true,
         processRunning: true,
+        readReady: false,
       },
       runtime: {
         ...TRUSTED_RUNTIME,
@@ -249,13 +257,28 @@ describe('mt5Model ledgers', () => {
         shadowMode: true,
         readOnlyMode: true,
       },
-      account: { loginMasked: '••••0002', server: 'SyntheticBroker-Live16' },
+      account: {
+        loginMasked: '••••0002',
+        server: 'SyntheticBroker-Live16',
+        currency: 'USD',
+        equity: 998.25,
+        balance: 1000,
+      },
     };
     const raw = withTrustedMt5Connections();
+    raw.snapshot.account = {
+      ...raw.snapshot.account,
+      currency: 'USC',
+      equity: 10020.5,
+      balance: 10000,
+    };
     raw.secondaryAccount = disconnectedSecondary;
     raw.secondarySnapshot = disconnectedSecondary;
     const snapshot = normalizeMt5Snapshot(raw);
     const secondaryCard = buildMt5AccountCards(snapshot)[1];
+    const rootCause = buildMt5SnapshotRootCauseBanner(snapshot);
+    const recoveryRows = buildMt5SnapshotRecoveryRows(snapshot);
+    const coreMetrics = buildMt5CoreMetrics(snapshot);
 
     expect(snapshot.secondaryConnection.login).toBe('••••0002');
     expect(snapshot.secondaryConnection).toMatchObject({
@@ -263,6 +286,7 @@ describe('mt5Model ledgers', () => {
       brokerConnected: false,
       accountAuthorized: false,
       connected: false,
+      readReady: false,
     });
     expect(secondaryCard.statusLabel).toBe('经纪商未连接');
     expect(secondaryCard.items.find((item) => item.label === '本地身份授权')).toMatchObject({
@@ -273,6 +297,106 @@ describe('mt5Model ledgers', () => {
       value: '已启用 / 未连接',
       status: 'blocked',
       hint: expect.stringContaining('Invalid account'),
+    });
+    expect(rootCause).toMatchObject({
+      status: 'warn',
+      label: '主账号可复核 · 第二账号未连接',
+      title: '主账号可用于只读复核，第二账号当前不可确认',
+    });
+    expect(rootCause.rootCauseLine).toContain('第二账号：Broker 未连接');
+    expect(rootCause.blockedLine).toContain('双账号合计');
+    expect(rootCause.usableLine).toContain('主账号余额、净值');
+    expect(rootCause.nextAction).toContain('恢复第二账号 Broker 登录与授权');
+    expect(recoveryRows[1]).toMatchObject({
+      状态: 'Broker 未连接',
+      可信范围: expect.stringContaining('当前净值、余额、持仓、挂单和 EA 权限不可确认'),
+    });
+    for (const label of ['当前持仓', '净值', '余额']) {
+      expect(secondaryCard.items.find((item) => item.label === label)).toMatchObject({
+        value: '不可确认',
+        status: 'blocked',
+      });
+    }
+    expect(coreMetrics.find((item) => item.label === '余额')).toMatchObject({
+      value: '10000.00 USC',
+    });
+    expect(coreMetrics.find((item) => item.label === '净值')).toMatchObject({
+      value: '10020.50 USC',
+    });
+    for (const label of ['持仓', '挂单']) {
+      expect(coreMetrics.find((item) => item.label === label)).toMatchObject({
+        value: '不可确认',
+        status: 'blocked',
+      });
+    }
+  });
+
+  it('fails closed on contradictory or unknown connection evidence', () => {
+    const contradictory = withTrustedMt5Connections({
+      secondarySnapshot: {
+        connection: {
+          semantics: 'EXPLICIT_CONNECTION_EVIDENCE_V2',
+          brokerSessionConnected: false,
+          accountAuthorized: true,
+          writerFresh: true,
+          processRunning: true,
+          readReady: true,
+        },
+      },
+    });
+    contradictory.secondaryAccount = contradictory.secondarySnapshot;
+    const contradictorySnapshot = normalizeMt5Snapshot(contradictory);
+    expect(contradictorySnapshot.secondaryConnection).toMatchObject({
+      brokerConnected: false,
+      readReady: false,
+    });
+    expect(buildMt5SnapshotRootCauseBanner(contradictorySnapshot)).toMatchObject({ status: 'warn' });
+
+    const unknown = withTrustedMt5Connections();
+    const unknownSecondary = {
+      ok: true,
+      status: 'EA_SNAPSHOT',
+      snapshotFresh: true,
+      _freshness: { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false },
+      account: { login: '90000002', server: 'SyntheticBroker-Demo16' },
+    };
+    unknown.secondaryAccount = unknownSecondary;
+    unknown.secondarySnapshot = unknownSecondary;
+    const unknownSnapshot = normalizeMt5Snapshot(unknown);
+    expect(unknownSnapshot.secondaryConnection.connectionEvidenceKnown).toBe(false);
+    expect(buildMt5SnapshotRecoveryRows(unknownSnapshot)[1]).toMatchObject({
+      状态: '连接证据未知',
+      可信范围: expect.stringContaining('不可确认'),
+    });
+    expect(buildMt5SnapshotRootCauseBanner(unknownSnapshot)).toMatchObject({ status: 'warn' });
+  });
+
+  it('keeps a primary connection failure globally blocked even when the secondary is healthy', () => {
+    const raw = withTrustedMt5Connections();
+    const disconnectedPrimary = {
+      ...raw.account,
+      connection: {
+        semantics: 'EXPLICIT_CONNECTION_EVIDENCE_V2',
+        brokerSessionConnected: false,
+        accountAuthorized: false,
+        writerFresh: true,
+        processRunning: true,
+        readReady: false,
+      },
+      runtime: { ...TRUSTED_RUNTIME, connected: false, accountAuthorized: false },
+    };
+    raw.account = disconnectedPrimary;
+    raw.snapshot = disconnectedPrimary;
+    const snapshot = normalizeMt5Snapshot(raw);
+
+    expect(buildMt5SnapshotRootCauseBanner(snapshot)).toMatchObject({
+      status: 'blocked',
+      label: '主账号当前状态已阻断',
+      title: 'MT5 当前账号快照不能当作实时状态',
+    });
+    expect(resolveMt5ReadonlyConnectionSummary(snapshot)).toMatchObject({
+      primaryHealthy: false,
+      bannerStatus: 'blocked',
     });
   });
 
@@ -782,7 +906,8 @@ describe('mt5Model ledgers', () => {
       打开页面: '/vue/?workspace=mt5',
       数据年龄: '主账号 / SyntheticBroker-Demo12：writer 未运行，10.1 天 / 阈值 待确认',
       进程诊断: '未检测到 terminal64/wine 进程',
-      验收标准: '对应只读桥 fresh=true，且 terminal64/wine 进程被检测到。',
+      验收标准:
+        '对应只读桥 fresh=true、terminal64/wine 进程已检测，且 Broker 已连接、账号已授权、readReady=true。',
     });
     expect(rows[0].下一步).toContain('未检测到 terminal64/wine 进程');
     expect(rows[0].下一步).toContain('确认 Live12 HFM/MT5 终端正在运行');
@@ -793,7 +918,8 @@ describe('mt5Model ledgers', () => {
       状态: '快照过期',
       打开页面: '/vue/?workspace=mt5',
       数据年龄: '第二账号 / SyntheticBroker-Demo16：快照过期，10.1 天 / 阈值 待确认',
-      验收标准: '对应只读桥 fresh=true，且 terminal64/wine 进程被检测到。',
+      验收标准:
+        '对应只读桥 fresh=true、terminal64/wine 进程已检测，且 Broker 已连接、账号已授权、readReady=true。',
     });
     expect(rows[1].下一步).toContain('/api/mt5-readonly-secondary/snapshot');
     expect(rows[1].下一步).not.toContain('刷新 /api/mt5-readonly/snapshot');
@@ -1007,7 +1133,7 @@ describe('mt5Model ledgers', () => {
     });
     expect(metrics.find((item) => item.label === '当前持仓')).toMatchObject({
       value: '不可确认',
-      status: 'warn',
+      status: 'blocked',
     });
   });
 
@@ -1312,8 +1438,8 @@ describe('mt5Model ledgers', () => {
       浮盈: -31.17,
     });
     expect(buildMt5AccountCards(snapshot)[1].items.find((item) => item.label === '当前持仓')).toMatchObject({
-      value: '1 笔',
-      status: 'warn',
+      value: '不可确认',
+      status: 'blocked',
     });
   });
 

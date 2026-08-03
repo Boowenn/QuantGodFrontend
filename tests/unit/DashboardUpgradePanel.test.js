@@ -19,6 +19,17 @@ function mountPanel(raw) {
   });
 }
 
+function readyReadonlyConnection() {
+  return {
+    semantics: 'EXPLICIT_CONNECTION_EVIDENCE_V2',
+    brokerSessionConnected: true,
+    accountAuthorized: true,
+    writerFresh: true,
+    processRunning: true,
+    readReady: true,
+  };
+}
+
 describe('DashboardUpgradePanel', () => {
   it('does not present stale MT5 positions as realtime account evidence', () => {
     const wrapper = mountPanel({
@@ -79,6 +90,7 @@ describe('DashboardUpgradePanel', () => {
         _api: { ok: true },
         status: 'FRESH_EA_SNAPSHOT',
         snapshotFresh: true,
+        connection: readyReadonlyConnection(),
         _freshness: {
           status: 'FRESH_EA_SNAPSHOT',
           stale: false,
@@ -90,6 +102,7 @@ describe('DashboardUpgradePanel', () => {
         _api: { ok: true },
         status: 'FRESH_EA_SNAPSHOT',
         snapshotFresh: true,
+        connection: readyReadonlyConnection(),
         _freshness: { status: 'FRESH_EA_SNAPSHOT', stale: false, fresh: true },
       },
     });

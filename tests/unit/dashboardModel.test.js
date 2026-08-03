@@ -26,6 +26,14 @@ function freshPayload(equity = 1000) {
     ok: true,
     account: { equity },
     snapshotFresh: true,
+    connection: {
+      semantics: 'EXPLICIT_CONNECTION_EVIDENCE_V2',
+      brokerSessionConnected: true,
+      accountAuthorized: true,
+      writerFresh: true,
+      processRunning: true,
+      readReady: true,
+    },
     source: { fresh: true, ageSeconds: 2, maxAgeSeconds: 180 },
     _api: { ok: true },
   };
@@ -190,7 +198,7 @@ describe('Forex-only dashboard model', () => {
     });
     expect(banner).toMatchObject({
       status: 'warn',
-      label: '系统部分可用 · 第二账号未连接',
+      label: '系统部分可用 · 第二账号：Broker 未连接',
       title: '主账号只读监控正常，第二账号需要恢复',
     });
     expect(dashboardMetric).toMatchObject({ value: 1002, status: 'ok' });
@@ -208,6 +216,136 @@ describe('Forex-only dashboard model', () => {
       状态: '主账号可用 / 第二账号待恢复',
     });
     expect(buildSnapshotImpactSummary(snapshot)).toMatchObject({ status: 'warn', p0Count: 0 });
+  });
+
+  it('fails closed for unknown or contradictory secondary connection evidence', () => {
+    const unknownSecondary = freshPayload(998);
+    delete unknownSecondary.connection;
+    const unknownSnapshot = normalizeDashboardSnapshot({
+      operatorOverview: operatorOverview(),
+      mt5Snapshot: freshPayload(),
+      secondaryMt5Snapshot: unknownSecondary,
+    });
+    expect(unknownSnapshot).toMatchObject({
+      secondaryBlocked: true,
+      partiallyAvailable: true,
+      secondaryBlockReason: '连接证据未知',
+    });
+
+    const contradictorySecondary = freshPayload(998);
+    contradictorySecondary.connection = {
+      ...contradictorySecondary.connection,
+      brokerSessionConnected: false,
+      readReady: true,
+    };
+    const contradictorySnapshot = normalizeDashboardSnapshot({
+      operatorOverview: operatorOverview(),
+      mt5Snapshot: freshPayload(),
+      secondaryMt5Snapshot: contradictorySecondary,
+    });
+    expect(contradictorySnapshot.secondaryConnection).toMatchObject({
+      readReady: false,
+      blocked: true,
+      label: 'Broker 未连接',
+    });
+    expect(buildSnapshotRootCauseBanner(contradictorySnapshot)).toMatchObject({ status: 'warn' });
+  });
+
+  it('uses the actual secondary API or freshness blocker in partial-availability guidance', () => {
+    const staleSecondary = {
+      ...freshPayload(998),
+      snapshotFresh: false,
+      source: {
+        fresh: false,
+        stale: true,
+        ageSeconds: 900,
+        maxAgeSeconds: 180,
+        nextActionZh: '恢复第二账号 writer 专属动作。',
+      },
+    };
+    const staleSnapshot = normalizeDashboardSnapshot({
+      operatorOverview: operatorOverview(),
+      mt5Snapshot: freshPayload(),
+      secondaryMt5Snapshot: staleSecondary,
+    });
+    expect(staleSnapshot).toMatchObject({
+      partiallyAvailable: true,
+      secondaryBlockReason: '快照过期',
+    });
+    expect(staleSnapshot.secondaryNextAction).toContain('writer');
+    expect(staleSnapshot.secondaryNextAction).not.toContain('Broker 登录');
+    expect(buildSnapshotRootCauseBanner(staleSnapshot).rootCauseLine).toContain('第二账号：快照过期');
+
+    const failedSnapshot = normalizeDashboardSnapshot({
+      operatorOverview: operatorOverview(),
+      mt5Snapshot: freshPayload(),
+      secondaryMt5Snapshot: {
+        ok: false,
+        endpointLoadFailed: true,
+        error: { message: 'HTTP 503' },
+        _api: { ok: false, status: 503 },
+      },
+    });
+    expect(failedSnapshot).toMatchObject({
+      partiallyAvailable: true,
+      secondaryBlockReason: '只读接口不可用',
+    });
+    expect(buildSnapshotRootCauseBanner(failedSnapshot).nextAction).toContain(
+      '恢复 /api/mt5-readonly-secondary/snapshot',
+    );
+  });
+
+  it('lets only fresh explicit primary connection failures override a healthy overview', () => {
+    const noDetail = normalizeDashboardSnapshot({ operatorOverview: operatorOverview() });
+    expect(noDetail).toMatchObject({
+      primaryExplicitConnectionBlocked: false,
+      primaryBlocked: false,
+    });
+
+    const staleContradiction = {
+      ...freshPayload(),
+      snapshotFresh: false,
+      source: { fresh: false, stale: true, ageSeconds: 900, maxAgeSeconds: 180 },
+      connection: {
+        ...freshPayload().connection,
+        brokerSessionConnected: false,
+        readReady: false,
+      },
+    };
+    const staleDetail = normalizeDashboardSnapshot({
+      operatorOverview: operatorOverview(),
+      mt5Snapshot: staleContradiction,
+    });
+    expect(staleDetail).toMatchObject({
+      primaryExplicitConnectionBlocked: false,
+      primaryBlocked: false,
+    });
+
+    const freshContradiction = {
+      ...freshPayload(),
+      connection: {
+        ...freshPayload().connection,
+        brokerSessionConnected: false,
+        readReady: true,
+      },
+    };
+    const freshDetail = normalizeDashboardSnapshot({
+      operatorOverview: operatorOverview(),
+      mt5Snapshot: freshContradiction,
+    });
+    expect(freshDetail).toMatchObject({
+      primaryExplicitConnectionBlocked: true,
+      primaryBlocked: true,
+      overallStatusTone: 'blocked',
+    });
+    expect(buildSnapshotRootCauseBanner(freshDetail)).toMatchObject({
+      status: 'blocked',
+      label: '主账号连接证据冲突',
+    });
+    expect(buildOperatorOverviewBlockerRows(freshDetail)[0]).toMatchObject({
+      优先级: 'P0',
+      阻断代码: 'PRIMARY_CONNECTION_EVIDENCE_CONFLICT',
+    });
   });
 
   it('fails closed when an account response lacks explicit success or freshness', () => {
@@ -461,12 +599,46 @@ describe('Forex-only dashboard model', () => {
       title: '主账号只读监控正常，研究门禁与第二账号需要恢复',
     });
     expect(banner.rootCauseLine).toContain('自动化链未就绪');
-    expect(banner.rootCauseLine).toContain('第二账号Broker 未连接');
+    expect(banner.rootCauseLine).toContain('第二账号：Broker 未连接');
     expect(banner.nextAction).toContain('补齐研究门禁证据');
-    expect(banner.nextAction).toContain('恢复第二账号 Broker 授权');
+    expect(banner.nextAction).toContain('恢复第二账号 Broker 登录与账号授权');
     expect(dashboardRow).toMatchObject({
       修复优先级: 'P1',
       状态: '主账号可用 / 研究门禁与第二账号待恢复',
+    });
+  });
+
+  it('never lets research-only blockers downgrade a fresh primary connection conflict', () => {
+    const overview = operatorOverview({
+      operationalReady: false,
+      overallStatus: 'BLOCKED',
+      blockedReasons: ['AUTOMATION_NOT_RUN_FRESH', 'EVIDENCE_FAIL_FRESH'],
+      automation: { status: 'NOT_RUN', freshness: 'FRESH', ready: false },
+      evidence: { production: { status: 'FAIL', freshness: 'FRESH' }, ready: false },
+    });
+    const primary = freshPayload();
+    primary.connection = {
+      ...primary.connection,
+      brokerSessionConnected: false,
+      readReady: true,
+    };
+    const snapshot = normalizeDashboardSnapshot({ operatorOverview: overview, mt5Snapshot: primary });
+    const banner = buildSnapshotRootCauseBanner(snapshot);
+
+    expect(snapshot).toMatchObject({
+      primaryExplicitConnectionBlocked: true,
+      primaryBlocked: true,
+      overallStatusTone: 'blocked',
+    });
+    expect(banner).toMatchObject({
+      status: 'blocked',
+      label: '主账号连接证据冲突',
+      title: '主账号当前只读状态不可确认',
+    });
+    expect(banner.title).not.toContain('系统运行正常');
+    expect(buildOperatorOverviewBlockerRows(snapshot)[0]).toMatchObject({
+      优先级: 'P0',
+      阻断代码: 'PRIMARY_CONNECTION_EVIDENCE_CONFLICT',
     });
   });
 
