@@ -41,10 +41,20 @@ function overviewPayload() {
   };
 }
 
-test('operator overview is the only first-paint dashboard request', async () => {
+test('dashboard first paint uses the overview while the global health strip also checks the secondary account', async () => {
   const calls = [];
   globalThis.fetch = async (url) => {
     calls.push(String(url));
+    if (String(url) === '/api/mt5-readonly-secondary/snapshot') {
+      return jsonResponse({
+        ok: true,
+        status: 'DISABLED',
+        optional: true,
+        enabled: false,
+        snapshotFresh: true,
+        _freshness: { status: 'DISABLED', fresh: true, optional: true, enabled: false },
+      });
+    }
     return jsonResponse(overviewPayload());
   };
 
@@ -52,12 +62,17 @@ test('operator overview is the only first-paint dashboard request', async () => 
   const dashboard = await loadDashboardWorkspaceCore();
   const strip = await loadSnapshotHealthCore();
 
-  assert.deepEqual(calls, ['/api/operator/overview', '/api/operator/overview', '/api/operator/overview']);
+  assert.deepEqual(calls, [
+    '/api/operator/overview',
+    '/api/operator/overview',
+    '/api/operator/overview',
+    '/api/mt5-readonly-secondary/snapshot',
+  ]);
   assert.equal(direct._api.ok, true);
   assert.equal(dashboard.operatorOverview.payload.overallStatus, 'PASS');
   assert.equal(strip.operatorOverview._api.endpoint, '/api/operator/overview');
   assert.deepEqual(Object.keys(dashboard), ['operatorOverview']);
-  assert.deepEqual(Object.keys(strip), ['operatorOverview']);
+  assert.deepEqual(Object.keys(strip).sort(), ['operatorOverview', 'secondaryMt5Snapshot']);
 });
 
 test('operator overview HTTP failures remain explicit blocked envelopes', async () => {

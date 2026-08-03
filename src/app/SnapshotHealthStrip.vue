@@ -37,6 +37,7 @@ import {
 
 const state = shallowReactive({
   operatorOverview: null,
+  secondaryMt5Snapshot: null,
 });
 
 const loading = ref(false);

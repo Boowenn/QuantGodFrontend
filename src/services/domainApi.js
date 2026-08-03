@@ -51,7 +51,21 @@ export async function loadDashboardReadonlyRefresh(options = {}) {
 }
 
 export async function loadSnapshotHealthCore(options = {}) {
-  return loadNamedEntries(operatorOverviewEntries, options, 1);
+  return loadNamedEntries(
+    [
+      ...operatorOverviewEntries,
+      [
+        'secondaryMt5Snapshot',
+        (requestOptions) =>
+          fetchJson('/api/mt5-readonly-secondary/snapshot', null, {
+            ...requestOptions,
+            timeoutMs: 10000,
+          }),
+      ],
+    ],
+    options,
+    2,
+  );
 }
 
 export async function loadDashboardWorkspace(options = {}) {

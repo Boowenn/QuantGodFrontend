@@ -3266,6 +3266,7 @@ export function resolveMt5ReadonlyConnectionSummary(snapshot = {}, canonicalMt5 
       : 'DISCONNECTED';
   const secondaryHealthy = secondaryState === 'DISABLED' || secondaryState === 'CONNECTED';
   const healthy = primaryHealthy && secondaryHealthy;
+  const partiallyAvailable = !canonicalUnknown && primaryHealthy && secondaryState === 'DISCONNECTED';
   const marketClosed = snapshot.marketSession === 'MARKET_CLOSED';
 
   let bannerLabel = 'MT5 连接证据不完整';
@@ -3281,8 +3282,12 @@ export function resolveMt5ReadonlyConnectionSummary(snapshot = {}, canonicalMt5 
       ? 'MARKET_CLOSED · 主账号 Shadow / ReadOnly · 第二账号未启用'
       : '主账号已连接 · 第二账号未启用 · Shadow / ReadOnly';
   } else if (primaryHealthy && secondaryState === 'DISCONNECTED') {
-    bannerLabel = '主账号已连接 · 第二账号未连接';
-    runtimeLabel = 'Shadow / ReadOnly · 第二账号连接证据不完整';
+    bannerLabel = marketClosed
+      ? '主账号只读可用 · 第二账号未连接 · MARKET_CLOSED'
+      : '主账号只读可用 · 第二账号未连接';
+    runtimeLabel = marketClosed
+      ? 'MARKET_CLOSED · 部分可用 · 第二账号未连接'
+      : '部分可用 · 主账号 Shadow / ReadOnly 正常 · 第二账号未连接';
   } else if (healthy) {
     bannerLabel = marketClosed ? '双账号已连接 · MARKET_CLOSED' : '双账号只读连接正常';
     runtimeLabel = marketClosed
@@ -3296,9 +3301,10 @@ export function resolveMt5ReadonlyConnectionSummary(snapshot = {}, canonicalMt5 
     secondaryState,
     canonicalUnknown,
     healthy,
-    bannerStatus: healthy ? (marketClosed ? 'warn' : 'ok') : 'blocked',
+    partiallyAvailable,
+    bannerStatus: partiallyAvailable ? 'warn' : healthy ? (marketClosed ? 'warn' : 'ok') : 'blocked',
     bannerLabel,
-    runtimeStatus: healthy ? 'warn' : 'blocked',
+    runtimeStatus: healthy || partiallyAvailable ? 'warn' : 'blocked',
     runtimeLabel,
   };
 }

@@ -162,7 +162,7 @@ describe('mt5Model ledgers', () => {
     ).toBe(false);
   });
 
-  it('does not let a healthy canonical primary hide an enabled but disconnected secondary account', () => {
+  it('keeps a healthy primary partially available while surfacing a disconnected secondary account', () => {
     const unavailableSecondary = {
       ok: false,
       status: 'UNAVAILABLE',
@@ -194,8 +194,11 @@ describe('mt5Model ledgers', () => {
       secondaryHealthy: false,
       secondaryState: 'DISCONNECTED',
       healthy: false,
-      bannerStatus: 'blocked',
-      bannerLabel: '主账号已连接 · 第二账号未连接',
+      partiallyAvailable: true,
+      bannerStatus: 'warn',
+      bannerLabel: '主账号只读可用 · 第二账号未连接',
+      runtimeStatus: 'warn',
+      runtimeLabel: '部分可用 · 主账号 Shadow / ReadOnly 正常 · 第二账号未连接',
     });
   });
 

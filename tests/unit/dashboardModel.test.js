@@ -52,6 +52,22 @@ function disabledSecondaryPayload() {
   };
 }
 
+function disconnectedSecondaryPayload(equity = 998) {
+  return {
+    ...freshPayload(equity),
+    status: 'EA_SNAPSHOT',
+    connection: {
+      semantics: 'EXPLICIT_CONNECTION_EVIDENCE_V2',
+      accountIdentityPresent: true,
+      brokerSessionConnected: false,
+      accountAuthorized: false,
+      writerFresh: true,
+      processRunning: true,
+      readReady: false,
+    },
+  };
+}
+
 function operatorOverview(overrides = {}) {
   const payload = {
     schema: 'quantgod.operator_overview.v1',
@@ -148,6 +164,50 @@ describe('Forex-only dashboard model', () => {
     expect(
       buildEndpointHealth(raw).some((item) => item.endpoint === '/api/mt5-readonly-secondary/snapshot'),
     ).toBe(false);
+  });
+
+  it('keeps the dashboard partially available when only the secondary Broker connection is down', () => {
+    const raw = {
+      operatorOverview: operatorOverview(),
+      mt5Snapshot: freshPayload(1002),
+      secondaryMt5Snapshot: disconnectedSecondaryPayload(998),
+    };
+    const snapshot = normalizeDashboardSnapshot(raw);
+    const banner = buildSnapshotRootCauseBanner(snapshot);
+    const dashboardMetric = buildDashboardMetrics(snapshot).find((item) => item.label === '主账号净值');
+    const secondaryMetric = buildDashboardMetrics(snapshot).find((item) => item.label === '部署账号净值');
+    const secondaryEndpoint = buildEndpointHealth(raw).find(
+      (item) => item.endpoint === '/api/mt5-readonly-secondary/snapshot',
+    );
+    const recoveryRows = buildFrontendSnapshotRecoveryRows(snapshot);
+
+    expect(snapshot).toMatchObject({
+      primaryBlocked: false,
+      secondaryBlocked: true,
+      partiallyAvailable: true,
+      overallStatusTone: 'warn',
+      snapshotRecovery: { status: 'warn', label: '主账号可用 · 第二账号待恢复' },
+    });
+    expect(banner).toMatchObject({
+      status: 'warn',
+      label: '系统部分可用 · 第二账号未连接',
+      title: '主账号只读监控正常，第二账号需要恢复',
+    });
+    expect(dashboardMetric).toMatchObject({ value: 1002, status: 'ok' });
+    expect(secondaryMetric).toMatchObject({ value: '不可确认', status: 'blocked' });
+    expect(secondaryEndpoint).toMatchObject({
+      status: 'blocked',
+      value: 'Broker 未连接 / 已阻断',
+    });
+    expect(recoveryRows.find((row) => row.前端区域 === 'Dashboard')).toMatchObject({
+      修复优先级: 'P1',
+      状态: '主账号可用 / 第二账号待恢复',
+    });
+    expect(recoveryRows.find((row) => row.前端区域 === 'MT5')).toMatchObject({
+      修复优先级: 'P1',
+      状态: '主账号可用 / 第二账号待恢复',
+    });
+    expect(buildSnapshotImpactSummary(snapshot)).toMatchObject({ status: 'warn', p0Count: 0 });
   });
 
   it('fails closed when an account response lacks explicit success or freshness', () => {
@@ -372,6 +432,44 @@ describe('Forex-only dashboard model', () => {
     });
   });
 
+  it('preserves both research-gate and disconnected-secondary warnings in the aggregate banner', () => {
+    const overview = operatorOverview({
+      operationalReady: false,
+      overallStatus: 'BLOCKED',
+      blockedReasons: ['AUTOMATION_NOT_RUN_FRESH', 'EVIDENCE_FAIL_FRESH'],
+      automation: { status: 'NOT_RUN', freshness: 'FRESH', ready: false },
+      evidence: { production: { status: 'FAIL', freshness: 'FRESH' }, ready: false },
+    });
+    const snapshot = normalizeDashboardSnapshot({
+      operatorOverview: overview,
+      mt5Snapshot: freshPayload(),
+      secondaryMt5Snapshot: disconnectedSecondaryPayload(),
+    });
+    const banner = buildSnapshotRootCauseBanner(snapshot);
+    const dashboardRow = buildFrontendSnapshotRecoveryRows(snapshot).find(
+      (row) => row.前端区域 === 'Dashboard',
+    );
+
+    expect(snapshot).toMatchObject({
+      partiallyAvailable: true,
+      overallStatus: 'BLOCKED',
+      snapshotRecovery: { status: 'warn' },
+    });
+    expect(banner).toMatchObject({
+      status: 'warn',
+      label: '系统部分可用 · 研究门禁与第二账号待恢复',
+      title: '主账号只读监控正常，研究门禁与第二账号需要恢复',
+    });
+    expect(banner.rootCauseLine).toContain('自动化链未就绪');
+    expect(banner.rootCauseLine).toContain('第二账号Broker 未连接');
+    expect(banner.nextAction).toContain('补齐研究门禁证据');
+    expect(banner.nextAction).toContain('恢复第二账号 Broker 授权');
+    expect(dashboardRow).toMatchObject({
+      修复优先级: 'P1',
+      状态: '主账号可用 / 研究门禁与第二账号待恢复',
+    });
+  });
+
   it('keeps runtime MT5 blockers red and P0', () => {
     const overview = operatorOverview({
       operationalReady: false,
@@ -383,7 +481,10 @@ describe('Forex-only dashboard model', () => {
         monitorReady: false,
       },
     });
-    const snapshot = normalizeDashboardSnapshot({ operatorOverview: overview });
+    const snapshot = normalizeDashboardSnapshot({
+      operatorOverview: overview,
+      secondaryMt5Snapshot: disconnectedSecondaryPayload(),
+    });
 
     expect(buildSnapshotRootCauseBanner(snapshot)).toMatchObject({
       status: 'blocked',
