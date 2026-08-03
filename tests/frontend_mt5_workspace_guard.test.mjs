@@ -103,6 +103,16 @@ test('keeps MT5 snapshot root cause in a core first-paint load', () => {
   assert.doesNotMatch(coreLoadBody, /\/api\/usdjpy-strategy-lab\/evidence-os\/execution-feedback/);
 });
 
+test('MT5 workspace coalesces refreshes and refreshes immediately when visible again', () => {
+  const source = fs.readFileSync(new URL('../src/workspaces/mt5/Mt5Workspace.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /if \(loadInFlight\) \{\s*refreshQueued = true;/);
+  assert.match(source, /document\.addEventListener\('visibilitychange', handleVisibilityChange\)/);
+  assert.match(source, /document\.visibilityState === 'visible'/);
+  assert.match(source, /window\.setInterval\(refreshWhenVisible, MT5_REFRESH_MS\)/);
+  assert.match(source, /document\.removeEventListener\('visibilitychange', handleVisibilityChange\)/);
+});
+
 test('rejects direct fetch in MT5 workspace', () => {
   const root = makeProject({
     ...validFiles,

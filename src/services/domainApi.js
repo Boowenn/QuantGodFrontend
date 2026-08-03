@@ -37,6 +37,19 @@ export async function loadDashboardWorkspaceCore(options = {}) {
   return loadNamedEntries(operatorOverviewEntries, options, 1);
 }
 
+const dashboardReadonlyRefreshEntries = [
+  ...operatorOverviewEntries,
+  ['mt5Snapshot', (options) => fetchJson('/api/mt5-readonly/snapshot', null, options)],
+  [
+    'secondaryMt5Snapshot',
+    (options) => fetchJson('/api/mt5-readonly-secondary/snapshot', null, { ...options, timeoutMs: 10000 }),
+  ],
+];
+
+export async function loadDashboardReadonlyRefresh(options = {}) {
+  return loadNamedEntries(dashboardReadonlyRefreshEntries, options, 3);
+}
+
 export async function loadSnapshotHealthCore(options = {}) {
   return loadNamedEntries(operatorOverviewEntries, options, 1);
 }

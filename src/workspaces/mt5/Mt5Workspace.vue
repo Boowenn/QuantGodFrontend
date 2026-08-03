@@ -465,6 +465,8 @@ let refreshTimer = null;
 let loadInFlight = false;
 let loadController = null;
 let loadRunId = 0;
+let refreshQueued = false;
+let disposed = false;
 const MT5_REFRESH_MS = 60000;
 
 function abortLoad() {
@@ -473,7 +475,11 @@ function abortLoad() {
 }
 
 async function load(options = {}) {
-  if (loadInFlight) return;
+  if (disposed) return;
+  if (loadInFlight) {
+    refreshQueued = true;
+    return;
+  }
   const runId = loadRunId + 1;
   loadRunId = runId;
   const controller = new globalThis.AbortController();
@@ -502,7 +508,23 @@ async function load(options = {}) {
       loadInFlight = false;
       loadController = null;
       if (!options.silent) loading.value = false;
+      const shouldRefreshAgain = refreshQueued && !disposed;
+      refreshQueued = false;
+      if (shouldRefreshAgain) {
+        Promise.resolve().then(() => load({ silent: true }));
+      }
     }
+  }
+}
+
+function refreshWhenVisible() {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  load({ silent: true });
+}
+
+function handleVisibilityChange() {
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    refreshWhenVisible();
   }
 }
 
@@ -515,16 +537,18 @@ function revealTechnicalEvidence(event) {
 }
 
 onMounted(() => {
+  disposed = false;
   load();
-  refreshTimer = window.setInterval(() => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-    load({ silent: true });
-  }, MT5_REFRESH_MS);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  refreshTimer = window.setInterval(refreshWhenVisible, MT5_REFRESH_MS);
 });
 
 onUnmounted(() => {
+  disposed = true;
+  refreshQueued = false;
   if (refreshTimer) window.clearInterval(refreshTimer);
   refreshTimer = null;
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
   abortLoad();
 });
 </script>

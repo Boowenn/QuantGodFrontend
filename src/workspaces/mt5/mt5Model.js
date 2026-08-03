@@ -719,6 +719,10 @@ function firstObject(...values) {
   return values.find((value) => isObject(value) && Object.keys(value).length) || {};
 }
 
+function firstExplicitBoolean(...values) {
+  return values.find((value) => value === true || value === false) ?? null;
+}
+
 function hasAccountFields(value) {
   return (
     isObject(value) &&
@@ -747,8 +751,17 @@ function mt5ConnectionFromPayload(accountPayload, snapshotPayload = {}, options 
   );
   const runtime = firstObject(accountEnvelope.runtime, snapshotEnvelope.runtime);
   const terminal = firstObject(accountEnvelope.terminal, snapshotEnvelope.terminal);
+  const connectionState = firstObject(
+    accountEnvelope.connection,
+    snapshotEnvelope.connection,
+    runtime.connectionState,
+  );
   const hostProcess = mt5HostProcess(source);
-  const hostProcessMissing = mt5HostProcessMissing(hostProcess) || freshness.terminalProcessMissing === true;
+  const processRunningSignal = firstExplicitBoolean(connectionState.processRunning, runtime.processRunning);
+  const hostProcessMissing =
+    processRunningSignal === false ||
+    (processRunningSignal === null &&
+      (mt5HostProcessMissing(hostProcess) || freshness.terminalProcessMissing === true));
   const latestAuthorization = isObject(terminal.lastAuthorization) ? terminal.lastAuthorization : {};
   const login = pick(
     { account, source, latestAuthorization },
@@ -770,40 +783,69 @@ function mt5ConnectionFromPayload(accountPayload, snapshotPayload = {}, options 
   const terminalStatus = String(terminal.status || '').toUpperCase();
   const status = String(source.status || terminal.status || '').toUpperCase();
   const market = isObject(source.market) ? source.market : {};
-  const explicitBrokerDisconnected =
-    terminal.connected === false || runtime.connected === false || runtime.terminalConnected === false;
-  const brokerConnected = Boolean(
-    !explicitBrokerDisconnected &&
+  const brokerConnectionSignal = firstExplicitBoolean(
+    connectionState.brokerSessionConnected,
+    connectionState.brokerConnected,
+    runtime.brokerSessionConnected,
+    runtime.brokerConnected,
+    terminal.connected,
+    runtime.terminalConnected,
+    runtime.connected,
+  );
+  const brokerConnected =
+    brokerConnectionSignal ??
     (status === 'CONNECTED' ||
       status === 'AUTHORIZED' ||
       terminalStatus === 'CONNECTED' ||
-      terminalStatus === 'AUTHORIZED' ||
-      terminal.connected === true ||
-      runtime.connected === true ||
-      runtime.terminalConnected === true),
+      terminalStatus === 'AUTHORIZED');
+  const accountIdentityPresent =
+    firstExplicitBoolean(connectionState.accountIdentityPresent, runtime.accountIdentityPresent) ??
+    Boolean(normalizeAccountId(login) && normalizeServerName(server));
+  const authorizationSignal = firstExplicitBoolean(
+    connectionState.accountAuthorized,
+    runtime.accountAuthorized,
   );
-  const accountAuthorized = Boolean(
-    normalizeAccountId(login) &&
-    runtime.accountAuthorized !== false &&
-    (runtime.accountAuthorized === true ||
-      status === 'CONNECTED' ||
-      status === 'AUTHORIZED' ||
-      terminalStatus === 'AUTHORIZED'),
-  );
+  const accountAuthorized =
+    authorizationSignal ??
+    Boolean(
+      accountIdentityPresent &&
+      (status === 'CONNECTED' || status === 'AUTHORIZED' || terminalStatus === 'AUTHORIZED'),
+    );
+  const writerFreshSignal = firstExplicitBoolean(connectionState.writerFresh, runtime.writerFresh);
   const writerFresh = Boolean(
-    source.snapshotFresh !== false && freshness.fresh === true && !freshnessBlocksCurrentState(freshness),
+    writerFreshSignal !== false &&
+    source.snapshotFresh !== false &&
+    freshness.fresh === true &&
+    !freshnessBlocksCurrentState(freshness),
   );
   const marketSession = resolveMt5MarketSession(source, snapshotEnvelope, accountEnvelope);
   const quoteFresh = quoteFreshFromPayload(source, runtime, market, marketSession);
   const connected = brokerConnected && accountAuthorized;
+  const connectionError = connected
+    ? ''
+    : terminal.lastAuthFailure?.message ||
+      terminal.lastAuthFailure?.reason ||
+      source.error ||
+      source.detail?.stderr ||
+      source.pythonBridgeError ||
+      '';
 
   const connection = {
     ok: accountEnvelope.ok === true || snapshotEnvelope.ok === true,
     status: source.status || (connected ? 'CONNECTED' : 'MISSING'),
     connected,
     brokerConnected,
+    brokerSessionConnected: brokerConnected,
+    accountIdentityPresent,
     accountAuthorized,
     writerFresh,
+    processRunning:
+      processRunningSignal ??
+      (hostProcess.terminalProcessDetected === true
+        ? true
+        : hostProcess.terminalProcessDetected === false
+          ? false
+          : null),
     quoteFresh,
     marketSession,
     tradingReady: false,
@@ -876,7 +918,10 @@ function mt5ConnectionFromPayload(accountPayload, snapshotPayload = {}, options 
     terminal,
     hostProcess,
     hostProcessKnown: Boolean(
-      hostProcessMissing || hostProcess.status || hostProcess.terminalProcessDetected !== null,
+      processRunningSignal !== null ||
+      hostProcessMissing ||
+      hostProcess.status ||
+      hostProcess.terminalProcessDetected !== null,
     ),
     hostProcessMissing,
     hostProcessLine:
@@ -886,13 +931,7 @@ function mt5ConnectionFromPayload(accountPayload, snapshotPayload = {}, options 
     snapshotFresh: source.snapshotFresh ?? freshness.fresh,
     freshness,
     sourceFile: source.source?.file || freshness.sourceFile || '',
-    error:
-      terminal.lastAuthFailure?.message ||
-      terminal.lastAuthFailure?.reason ||
-      source.error ||
-      source.detail?.stderr ||
-      source.pythonBridgeError ||
-      '',
+    error: connectionError,
   };
   connection.tradingReady = accountAutoTradingEnabled(connection);
   return connection;
@@ -1029,14 +1068,14 @@ function accountConnectionAxisItems(account = {}) {
       value:
         account.accountAuthorized && account.brokerConnected
           ? '已授权'
-          : account.accountAuthorized
+          : account.accountIdentityPresent
             ? '已登记 / Broker 未验证'
             : '未授权',
       status: account.accountAuthorized && account.brokerConnected ? 'ok' : 'blocked',
       hint:
         account.accountAuthorized && account.brokerConnected
           ? maskAccountLogin(account.login)
-          : account.accountAuthorized
+          : account.accountIdentityPresent
             ? '本地账号与服务器符合只读配置，但当前 Broker 未连接，不能视为在线授权成功。'
             : '等待明确 accountAuthorized 证据。',
     },

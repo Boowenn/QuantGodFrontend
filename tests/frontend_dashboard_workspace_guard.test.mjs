@@ -67,3 +67,17 @@ test('active Dashboard and MT5 loaders do not request the retired daily-autopilo
   const service = fs.readFileSync(path.join(root, 'src/services/domainApi.js'), 'utf8');
   assert.doesNotMatch(service, /['"]\/api\/daily-autopilot['"]/);
 });
+
+test('Dashboard uses a coalesced lightweight readonly refresh on timer and visibility recovery', () => {
+  const workspace = fs.readFileSync(
+    new URL('../src/workspaces/dashboard/DashboardWorkspace.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(workspace, /loadDashboardReadonlyRefresh/);
+  assert.match(workspace, /if \(loadInFlight\) \{\s*queueLoad\(kind\);/);
+  assert.match(workspace, /runLoad\('readonly', \{ silent: true \}\)/);
+  assert.match(workspace, /document\.addEventListener\('visibilitychange', handleVisibilityChange\)/);
+  assert.match(workspace, /window\.setInterval\(refreshReadonlyWhenVisible, DASHBOARD_READONLY_REFRESH_MS\)/);
+  assert.match(workspace, /document\.removeEventListener\('visibilitychange', handleVisibilityChange\)/);
+});

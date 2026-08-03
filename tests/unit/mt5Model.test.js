@@ -231,11 +231,18 @@ describe('mt5Model ledgers', () => {
         connected: false,
         lastAuthFailure: { reason: 'Invalid account' },
       },
+      connection: {
+        accountIdentityPresent: true,
+        brokerSessionConnected: false,
+        accountAuthorized: false,
+        writerFresh: true,
+        processRunning: true,
+      },
       runtime: {
         ...TRUSTED_RUNTIME,
         connected: false,
         terminalConnected: false,
-        accountAuthorized: true,
+        accountAuthorized: false,
         shadowMode: true,
         readOnlyMode: true,
       },
@@ -248,6 +255,12 @@ describe('mt5Model ledgers', () => {
     const secondaryCard = buildMt5AccountCards(snapshot)[1];
 
     expect(snapshot.secondaryConnection.login).toBe('••••0002');
+    expect(snapshot.secondaryConnection).toMatchObject({
+      accountIdentityPresent: true,
+      brokerConnected: false,
+      accountAuthorized: false,
+      connected: false,
+    });
     expect(secondaryCard.statusLabel).toBe('经纪商未连接');
     expect(secondaryCard.items.find((item) => item.label === '本地身份授权')).toMatchObject({
       value: '已登记 / Broker 未验证',
@@ -257,6 +270,62 @@ describe('mt5Model ledgers', () => {
       value: '已启用 / 未连接',
       status: 'blocked',
       hint: expect.stringContaining('Invalid account'),
+    });
+  });
+
+  it('drops historical authorization failures after explicit Broker recovery', () => {
+    const recoveredSecondary = {
+      ok: true,
+      status: 'CONNECTED',
+      snapshotFresh: true,
+      _freshness: { status: 'FRESH_EA_SNAPSHOT', fresh: true, stale: false },
+      terminal: {
+        connected: true,
+        lastAuthFailure: { reason: 'Invalid account', message: 'authorization failed: Invalid account' },
+        lastAuthorization: { server: 'SyntheticBroker-Live16' },
+      },
+      connection: {
+        accountIdentityPresent: true,
+        brokerSessionConnected: true,
+        accountAuthorized: true,
+        writerFresh: true,
+        processRunning: true,
+      },
+      runtime: {
+        ...TRUSTED_RUNTIME,
+        connected: true,
+        terminalConnected: true,
+        brokerConnected: true,
+        accountAuthorized: true,
+        shadowMode: true,
+        readOnlyMode: true,
+      },
+      account: { loginMasked: '••••0002', server: 'SyntheticBroker-Live16' },
+      pythonBridgeError: 'optional Python bridge unavailable',
+    };
+    const raw = withTrustedMt5Connections();
+    raw.secondaryAccount = recoveredSecondary;
+    raw.secondarySnapshot = recoveredSecondary;
+    const snapshot = normalizeMt5Snapshot(raw);
+    const secondaryCard = buildMt5AccountCards(snapshot)[1];
+
+    expect(snapshot.secondaryConnection).toMatchObject({
+      connected: true,
+      brokerConnected: true,
+      accountIdentityPresent: true,
+      accountAuthorized: true,
+      writerFresh: true,
+      error: '',
+    });
+    expect(secondaryCard.note).not.toContain('Invalid account');
+    expect(secondaryCard.note).not.toContain('Python bridge');
+    expect(secondaryCard.items.find((item) => item.label === 'Broker 连接')).toMatchObject({
+      value: '已连接',
+      status: 'ok',
+    });
+    expect(secondaryCard.items.find((item) => item.label === '本地身份授权')).toMatchObject({
+      value: '已授权',
+      status: 'ok',
     });
   });
 

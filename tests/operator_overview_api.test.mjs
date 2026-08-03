@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 
 import {
+  loadDashboardReadonlyRefresh,
   loadDashboardWorkspaceCore,
   loadOperatorOverview,
   loadSnapshotHealthCore,
@@ -69,4 +70,21 @@ test('operator overview HTTP failures remain explicit blocked envelopes', async 
   assert.equal(state.operatorOverview._api.status, 503);
   assert.equal(state.operatorOverview.payload, undefined);
   assert.notEqual(state.operatorOverview.overallStatus, 'PASS');
+});
+
+test('dashboard readonly refresh loads only aggregate and two MT5 snapshots', async () => {
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    return jsonResponse({ ok: true, status: 'EA_SNAPSHOT', snapshotFresh: true });
+  };
+
+  const state = await loadDashboardReadonlyRefresh();
+
+  assert.deepEqual(calls.sort(), [
+    '/api/mt5-readonly-secondary/snapshot',
+    '/api/mt5-readonly/snapshot',
+    '/api/operator/overview',
+  ]);
+  assert.deepEqual(Object.keys(state).sort(), ['mt5Snapshot', 'operatorOverview', 'secondaryMt5Snapshot']);
 });

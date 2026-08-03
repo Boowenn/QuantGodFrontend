@@ -357,7 +357,11 @@
 
 <script setup>
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowReactive } from 'vue';
-import { loadDashboardWorkspace, loadDashboardWorkspaceCore } from '../../services/domainApi.js';
+import {
+  loadDashboardReadonlyRefresh,
+  loadDashboardWorkspace,
+  loadDashboardWorkspaceCore,
+} from '../../services/domainApi.js';
 import WorkspaceFrame from '../shared/WorkspaceFrame.vue';
 import MetricGrid from '../shared/MetricGrid.vue';
 import JsonPreview from '../shared/JsonPreview.vue';
@@ -447,29 +451,50 @@ const agentOpsEvidence = computed(() => resolveDashboardEvidenceState(state.agen
 const routeRows = computed(() => buildRouteRows(snapshot.value));
 const todoRows = computed(() => buildDailyTodoRows(state));
 const reviewRows = computed(() => buildDailyReviewRows(state));
+let refreshTimer = null;
+let loadInFlight = false;
 let loadController = null;
 let loadRunId = 0;
+let queuedLoadKind = '';
+let disposed = false;
+const DASHBOARD_READONLY_REFRESH_MS = 60000;
 
 function abortLoad() {
   loadController?.abort();
   loadController = null;
 }
 
-async function load() {
-  abortLoad();
+function queueLoad(kind) {
+  if (kind === 'full' || queuedLoadKind !== 'full') queuedLoadKind = kind;
+}
+
+async function runLoad(kind = 'full', options = {}) {
+  if (disposed) return;
+  if (loadInFlight) {
+    queueLoad(kind);
+    return;
+  }
   const runId = loadRunId + 1;
   loadRunId = runId;
   const controller = new globalThis.AbortController();
   loadController = controller;
-  loading.value = true;
+  loadInFlight = true;
+  if (!options.silent) loading.value = true;
   error.value = '';
   let coreLoaded = false;
   try {
+    if (kind === 'readonly') {
+      const readonlyState = await loadDashboardReadonlyRefresh({ signal: controller.signal });
+      if (controller.signal.aborted || runId !== loadRunId) return;
+      Object.assign(state, readonlyState);
+      return;
+    }
+
     const coreState = await loadDashboardWorkspaceCore({ signal: controller.signal });
     if (controller.signal.aborted || runId !== loadRunId) return;
     Object.assign(state, coreState);
     coreLoaded = true;
-    loading.value = false;
+    if (!options.silent) loading.value = false;
 
     const nextState = await loadDashboardWorkspace({ signal: controller.signal });
     if (controller.signal.aborted || runId !== loadRunId) return;
@@ -481,9 +506,31 @@ async function load() {
     }
   } finally {
     if (runId === loadRunId) {
-      loading.value = false;
+      loadInFlight = false;
       loadController = null;
+      if (!options.silent) loading.value = false;
+      const nextKind = queuedLoadKind;
+      queuedLoadKind = '';
+      const redundantReadonlyRefresh = kind === 'full' && nextKind === 'readonly';
+      if (nextKind && !disposed && !redundantReadonlyRefresh) {
+        Promise.resolve().then(() => runLoad(nextKind, { silent: nextKind === 'readonly' }));
+      }
     }
+  }
+}
+
+function load() {
+  return runLoad('full');
+}
+
+function refreshReadonlyWhenVisible() {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  runLoad('readonly', { silent: true });
+}
+
+function handleVisibilityChange() {
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    refreshReadonlyWhenVisible();
   }
 }
 
@@ -495,8 +542,21 @@ function revealAutomationPanel(event) {
   automationPanelVisible.value = automationPanelVisible.value || Boolean(event.target.open);
 }
 
-onMounted(load);
-onBeforeUnmount(abortLoad);
+onMounted(() => {
+  disposed = false;
+  load();
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  refreshTimer = window.setInterval(refreshReadonlyWhenVisible, DASHBOARD_READONLY_REFRESH_MS);
+});
+
+onBeforeUnmount(() => {
+  disposed = true;
+  queuedLoadKind = '';
+  if (refreshTimer) window.clearInterval(refreshTimer);
+  refreshTimer = null;
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  abortLoad();
+});
 </script>
 
 <style scoped>
