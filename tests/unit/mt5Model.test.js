@@ -114,50 +114,39 @@ describe('mt5Model ledgers', () => {
     expect(snapshot.accountConnections).toHaveLength(1);
     expect(snapshot.accountSlots).toHaveLength(2);
     expect(snapshot.accountProfiles).toHaveLength(2);
-    expect(buildMt5AccountCards(snapshot)).toHaveLength(2);
-    expect(buildMt5AccountCards(snapshot)[1]).toMatchObject({
-      role: 'secondary',
-      status: 'warn',
-      statusLabel: '未启用（可选）',
-    });
-    expect(buildMt5Metrics(snapshot).find((item) => item.label === '第二账号 EA')).toMatchObject({
-      value: '未启用（可选）',
-      status: 'warn',
-    });
-    expect(buildMt5Metrics(snapshot).find((item) => item.label === '第二账号净值')).toMatchObject({
-      value: '未启用',
-      status: 'warn',
-    });
-    expect(buildMt5SnapshotRecoveryRows(snapshot)).toHaveLength(2);
-    expect(buildMt5SnapshotRecoveryRows(snapshot)[1]).toMatchObject({
-      状态: '未启用（可选）',
-      可信范围: expect.stringContaining('不参与 active readiness'),
-    });
-    expect(buildSecondaryAccountItems(snapshot)[0]).toMatchObject({
-      label: '槽位状态',
-      value: '未启用（可选）',
-      status: 'warn',
-    });
-    expect(buildMt5ConnectionItems(snapshot).find((item) => item.label === '第二账号状态')).toMatchObject({
-      value: '未启用（可选）',
-      status: 'warn',
-    });
-    expect(
-      resolveMt5ReadonlyConnectionSummary(snapshot, {
-        writerFresh: true,
-        brokerConnectionKnown: true,
-        brokerConnected: true,
-        accountAuthorizationKnown: true,
-        accountAuthorized: true,
-        monitorReady: true,
-      }),
-    ).toMatchObject({
+    const canonicalMt5 = {
+      writerFresh: true,
+      brokerConnectionKnown: true,
+      brokerConnected: true,
+      accountAuthorizationKnown: true,
+      accountAuthorized: true,
+      monitorReady: true,
+    };
+    const summary = resolveMt5ReadonlyConnectionSummary(snapshot, canonicalMt5);
+    const cards = buildMt5AccountCards(snapshot);
+    const metrics = buildMt5Metrics(snapshot);
+    const recoveryRows = buildMt5SnapshotRecoveryRows(snapshot);
+    const connectionItems = buildMt5ConnectionItems(snapshot);
+    const rootCause = buildMt5SnapshotRootCauseBanner(snapshot);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ role: 'primary' });
+    expect(metrics.some((item) => item.label.includes('第二账号'))).toBe(false);
+    expect(recoveryRows).toHaveLength(1);
+    expect(recoveryRows[0].账户).toContain('主账号');
+    expect(buildSecondaryAccountItems(snapshot)).toEqual([]);
+    expect(connectionItems.some((item) => item.label === '第二账号状态')).toBe(false);
+    expect(summary).toMatchObject({
       healthy: true,
       secondaryState: 'DISABLED',
       bannerStatus: 'ok',
-      bannerLabel: '主账号已连接 · 第二账号未启用',
+      bannerLabel: '主账号已连接',
+      runtimeLabel: '主账号已连接 · Shadow / ReadOnly',
     });
-    expect(buildMt5SnapshotRootCauseBanner(snapshot)).toMatchObject({ status: 'ok' });
+    expect(rootCause).toMatchObject({ status: 'ok' });
+    expect(JSON.stringify({ cards, metrics, recoveryRows, connectionItems, summary, rootCause })).not.toMatch(
+      /第二账号|第二 MT5|Live16|双账号/,
+    );
     expect(
       buildEndpointHealth(primary).some((item) => item.endpoint.includes('mt5-readonly-secondary')),
     ).toBe(false);

@@ -166,12 +166,19 @@ describe('Forex-only dashboard model', () => {
 
     expect(snapshot).toMatchObject({ secondaryEnabled: false, secondaryBlocked: false });
     expect(snapshot.snapshotRecovery).toMatchObject({ status: 'ok' });
-    expect(buildSnapshotRootCauseBanner(snapshot)).toMatchObject({ status: 'ok' });
-    expect(buildSnapshotRootCauseBanner(snapshot).rootCauseLine).toContain('第二账号未启用（可选）');
+    const banner = buildSnapshotRootCauseBanner(snapshot);
+    const recoveryRows = buildFrontendSnapshotRecoveryRows(snapshot);
+    const impact = buildSnapshotImpactSummary(snapshot);
+
+    expect(banner).toMatchObject({
+      status: 'ok',
+      rootCauseLine: '主账号快照明确 fresh=true。',
+    });
     expect(buildDashboardMetrics(snapshot).some((item) => item.label === '部署账号净值')).toBe(false);
     expect(
       buildEndpointHealth(raw).some((item) => item.endpoint === '/api/mt5-readonly-secondary/snapshot'),
     ).toBe(false);
+    expect(JSON.stringify({ banner, recoveryRows, impact })).not.toMatch(/第二账号|部署账号|双账号/);
   });
 
   it('keeps the dashboard partially available when only the secondary Broker connection is down', () => {

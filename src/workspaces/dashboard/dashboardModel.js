@@ -947,7 +947,9 @@ export function buildSnapshotRecoveryItems(snapshot = {}) {
             ? '主账号可复核 / 双账号合计待确认'
             : '未知 / 已阻断',
       status: snapshot.snapshotRecovery?.status || 'blocked',
-      hint: '各账号独立判断；第二账号异常不会抹掉健康主账号的只读可信范围。',
+      hint: snapshot.secondaryEnabled
+        ? '各账号独立判断；第二账号异常不会抹掉健康主账号的只读可信范围。'
+        : '当前只核对主账号的新鲜只读证据。',
     },
   ];
 }
@@ -1012,7 +1014,9 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
         title: '主账号当前只读状态不可确认',
         rootCauseLine: `统一总览与新鲜主账号明细冲突：${snapshot.primaryConnection?.label || '连接未就绪'}。`,
         blockedLine: '主账号当前净值、余额、持仓、挂单与权限状态。',
-        usableLine: '历史交易流水、研究证据与第二账号诊断仍可只读复核。',
+        usableLine: snapshot.secondaryEnabled
+          ? '历史交易流水、研究证据与第二账号诊断仍可只读复核。'
+          : '历史交易流水与研究证据仍可只读复核。',
         evidenceLine: '/api/operator/overview + /api/mt5-readonly/snapshot',
         recoveryPathLine: '/vue/?workspace=mt5',
         nextAction: '核对主账号 Broker、授权、writer、进程与 readReady 显式证据；冲突解除前保持阻断。',
@@ -1116,7 +1120,7 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
         ? `主账号只读证据正常；第二账号：${snapshot.secondaryBlockReason || '状态不可确认'}。`
         : snapshot.secondaryEnabled
           ? '两个外汇账号快照均明确 fresh=true。'
-          : '当前启用的主账号快照明确 fresh=true；第二账号未启用（可选）。',
+          : '主账号快照明确 fresh=true。',
     blockedLine: blocked
       ? '账号、持仓、净值、权限和入场准备度'
       : partiallyAvailable
@@ -1127,9 +1131,7 @@ export function buildSnapshotRootCauseBanner(snapshot = {}) {
       : '策略、历史回测、GA 与治理证据仍可只读复核',
     evidenceLine: [
       `主账号 ${freshnessEvidence(snapshot.primaryFreshness)}`,
-      snapshot.secondaryEnabled
-        ? `部署账号 ${freshnessEvidence(snapshot.secondaryFreshness)}`
-        : '第二账号未启用（可选）',
+      ...(snapshot.secondaryEnabled ? [`部署账号 ${freshnessEvidence(snapshot.secondaryFreshness)}`] : []),
     ].join('；'),
     recoveryPathLine: '/vue/?workspace=mt5',
     nextAction: blocked

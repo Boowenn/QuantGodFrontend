@@ -1968,6 +1968,7 @@ export function buildMt5Metrics(snapshot) {
   const rsiEnabled = routeEnabled(snapshot, 'RSI_Reversal');
   const primary = snapshot.primaryConnection || snapshot;
   const secondary = snapshot.secondaryConnection || {};
+  const secondaryEnabled = snapshot.secondaryEnabled !== false && !accountSlotDisabled(secondary);
   const primaryFreshness = present(primary.freshness) ? primary.freshness : snapshot.latestFreshness;
   const secondaryFreshness = present(secondary.freshness)
     ? secondary.freshness
@@ -2006,14 +2007,12 @@ export function buildMt5Metrics(snapshot) {
     secondary.currency,
     secondarySnapshotState,
   );
-  const secondaryDisabled = accountSlotDisabled(secondary);
   const positionsCount = snapshot.positions.length;
   const combinedSnapshotState = {
-    blocked: primarySnapshotState.blocked || (snapshot.secondaryEnabled && secondarySnapshotState.blocked),
-    stale: primarySnapshotState.stale || (snapshot.secondaryEnabled && secondarySnapshotState.stale),
-    unconfirmed:
-      primarySnapshotState.unconfirmed || (snapshot.secondaryEnabled && secondarySnapshotState.unconfirmed),
-    hint: [primarySnapshotState.hint, snapshot.secondaryEnabled ? secondarySnapshotState.hint : '']
+    blocked: primarySnapshotState.blocked || (secondaryEnabled && secondarySnapshotState.blocked),
+    stale: primarySnapshotState.stale || (secondaryEnabled && secondarySnapshotState.stale),
+    unconfirmed: primarySnapshotState.unconfirmed || (secondaryEnabled && secondarySnapshotState.unconfirmed),
+    hint: [primarySnapshotState.hint, secondaryEnabled ? secondarySnapshotState.hint : '']
       .filter(Boolean)
       .join('；'),
   };
@@ -2034,26 +2033,28 @@ export function buildMt5Metrics(snapshot) {
       value: accountStatusLabel(primary),
       hint: `${maskAccountLogin(primary.login)} / ${humanizeStatus(primary.tradeStatus || snapshot.tradeStatus)}`,
     },
-    {
-      label: '第二账号 EA',
-      value: accountStatusLabel(secondary),
-      status: secondaryDisabled ? 'warn' : accountStatusTone(secondary),
-      hint: secondaryDisabled
-        ? '第二账号槽位已保留，但不参与 active readiness。'
-        : `${maskAccountLogin(secondary.login)} / ${humanizeStatus(secondary.tradeStatus || '—')}`,
-    },
+    ...(secondaryEnabled
+      ? [
+          {
+            label: '第二账号 EA',
+            value: accountStatusLabel(secondary),
+            status: accountStatusTone(secondary),
+            hint: `${maskAccountLogin(secondary.login)} / ${humanizeStatus(secondary.tradeStatus || '—')}`,
+          },
+        ]
+      : []),
     {
       ...primaryEquity,
       hint: primaryEquity.hint || primary.server || snapshot.server,
     },
-    {
-      ...secondaryEquity,
-      value: secondaryDisabled ? '未启用' : secondaryEquity.value,
-      status: secondaryDisabled ? 'warn' : secondaryEquity.status,
-      hint: secondaryDisabled
-        ? '可选第二账号未启用，不影响主账号当前状态。'
-        : secondaryEquity.hint || secondary.server || '等待第二账号快照',
-    },
+    ...(secondaryEnabled
+      ? [
+          {
+            ...secondaryEquity,
+            hint: secondaryEquity.hint || secondary.server || '等待第二账号快照',
+          },
+        ]
+      : []),
     positionsMetric,
     {
       label: 'RSI Shadow 路线',
@@ -2261,10 +2262,11 @@ function accountRecoveryRow(account = {}) {
 }
 
 export function buildMt5SnapshotRecoveryRows(snapshot = {}) {
-  const accounts = snapshot.accountSlots || snapshot.accountConnections || [];
+  const accounts = (snapshot.accountConnections || snapshot.accountSlots || []).filter(
+    (account) => !accountSlotDisabled(account),
+  );
   return accounts.map((account) => {
     const recovery = accountRecoveryRow(account);
-    const disabled = accountSlotDisabled(account);
     return {
       账户: accountRecoveryLabel(account),
       端点: recovery.endpoint,
@@ -2272,22 +2274,19 @@ export function buildMt5SnapshotRecoveryRows(snapshot = {}) {
       打开页面: '/vue/?workspace=mt5',
       数据年龄: recovery.evidenceLine,
       进程诊断: recovery.processLine,
-      可信范围: disabled
-        ? '第二账号未启用且不参与 active readiness；主账号状态独立判断。'
-        : recovery.blocksCurrentState
-          ? '当前净值、余额、持仓、挂单和 EA 权限不可确认；旧快照只作历史参考。'
-          : '可把只读桥快照作为当前账号状态。',
-      验收标准: disabled
-        ? '保持可选未启用，或启用后提供独立 fresh=true writer。'
-        : '对应只读桥 fresh=true、terminal64/wine 进程已检测，且 Broker 已连接、账号已授权、readReady=true。',
+      可信范围: recovery.blocksCurrentState
+        ? '当前净值、余额、持仓、挂单和 EA 权限不可确认；旧快照只作历史参考。'
+        : '可把只读桥快照作为当前账号状态。',
+      验收标准:
+        '对应只读桥 fresh=true、terminal64/wine 进程已检测，且 Broker 已连接、账号已授权、readReady=true。',
       下一步: recovery.nextStep,
     };
   });
 }
 
 export function buildMt5SnapshotRootCauseBanner(snapshot = {}) {
-  const displayRows = (snapshot.accountSlots || snapshot.accountConnections || []).map(accountRecoveryRow);
   const activeRows = (snapshot.accountConnections || []).map(accountRecoveryRow);
+  const displayRows = activeRows;
   const primaryRow = activeRows.find((row) => row.account.role === 'primary') || activeRows[0];
   const secondaryRow = activeRows.find((row) => row.account.role === 'secondary');
   const primaryBlocked = primaryRow?.blocksCurrentState === true;
@@ -2311,7 +2310,7 @@ export function buildMt5SnapshotRootCauseBanner(snapshot = {}) {
       ? `主账号当前只读状态可复核；第二账号：${secondaryRow.state}；该账号当前状态不可用。`
       : snapshot.secondaryEnabled
         ? 'Live12 与 Live16 当前快照、Broker 连接及账号授权均可用于只读复核。'
-        : '当前启用的主账号快照没有状态阻断；第二账号未启用（可选）。';
+        : '主账号当前快照、Broker 连接及账号授权均可用于只读复核。';
   const evidenceLine = displayRows.length
     ? displayRows.map((row) => row.evidenceLine).join('；')
     : snapshot.secondaryEnabled
@@ -3335,15 +3334,7 @@ export function buildAccountItems(snapshot) {
 
 export function buildSecondaryAccountItems(snapshot) {
   const secondary = snapshot.secondaryConnection || {};
-  if (accountSlotDisabled(secondary)) {
-    return [
-      { label: '槽位状态', value: '未启用（可选）', status: 'warn' },
-      { label: 'Broker 连接', value: '未启动第二终端', status: 'warn' },
-      { label: 'Writer 新鲜度', value: '不参与', status: 'warn' },
-      { label: '当前状态影响', value: '不影响主账号', status: 'ok' },
-      { label: '执行边界', value: 'Shadow / ReadOnly（无执行通道）', status: 'warn' },
-    ];
-  }
+  if (accountSlotDisabled(secondary)) return [];
   return accountSnapshotItems(secondary);
 }
 
@@ -3365,18 +3356,20 @@ export function buildMt5AccountCards(snapshot) {
       positions: primaryPositions,
     }),
   ];
-  cards.push(
-    accountCard(snapshot.secondaryConnection || {}, {
-      role: 'secondary',
-      eyebrow: 'USD ReadOnly Profile',
-      title: '美元账户 ReadOnly 观察',
-      lane: usdLane,
-      spreadGate: snapshot.spreadGate,
-      usdDeploymentGate: snapshot.usdDeploymentGate,
-      latestFreshness: snapshot.latestFreshness,
-      positions: secondaryPositions,
-    }),
-  );
+  if (snapshot.secondaryEnabled !== false && !accountSlotDisabled(snapshot.secondaryConnection || {})) {
+    cards.push(
+      accountCard(snapshot.secondaryConnection || {}, {
+        role: 'secondary',
+        eyebrow: 'USD ReadOnly Profile',
+        title: '美元账户 ReadOnly 观察',
+        lane: usdLane,
+        spreadGate: snapshot.spreadGate,
+        usdDeploymentGate: snapshot.usdDeploymentGate,
+        latestFreshness: snapshot.latestFreshness,
+        positions: secondaryPositions,
+      }),
+    );
+  }
   return cards;
 }
 
@@ -3423,12 +3416,10 @@ export function resolveMt5ReadonlyConnectionSummary(snapshot = {}, canonicalMt5 
     bannerLabel = 'MT5 连接与授权待确认';
     runtimeLabel = 'Shadow / ReadOnly · 状态待确认';
   } else if (primaryHealthy && secondaryState === 'DISABLED') {
-    bannerLabel = marketClosed
-      ? '主账号已连接 · 第二账号未启用 · MARKET_CLOSED'
-      : '主账号已连接 · 第二账号未启用';
+    bannerLabel = marketClosed ? '主账号已连接 · MARKET_CLOSED' : '主账号已连接';
     runtimeLabel = marketClosed
-      ? 'MARKET_CLOSED · 主账号 Shadow / ReadOnly · 第二账号未启用'
-      : '主账号已连接 · 第二账号未启用 · Shadow / ReadOnly';
+      ? 'MARKET_CLOSED · 主账号 Shadow / ReadOnly'
+      : '主账号已连接 · Shadow / ReadOnly';
   } else if (primaryHealthy && secondaryState === 'DISCONNECTED') {
     bannerLabel = marketClosed
       ? '主账号只读可用 · 第二账号未连接 · MARKET_CLOSED'
@@ -3474,20 +3465,20 @@ export function buildMt5ConnectionItems(snapshot) {
           ? 'Broker 已连接、账号已授权；结论只来自新鲜的 MT5 只读快照。'
           : '等待终端连接与账号授权证据；快照新鲜度不能替代连接证据。',
     },
-    {
-      label: '第二账号状态',
-      value: secondaryDisabled
-        ? '未启用（可选）'
-        : secondaryConnected
-          ? `${maskAccountLogin(secondary.login)} / ${secondary.server}`
-          : '已启用 / 未连接',
-      status: secondaryDisabled ? 'warn' : secondaryConnected ? 'ok' : 'blocked',
-      hint: secondaryDisabled
-        ? '第二账号槽位已保留，但不参与当前 active readiness。'
-        : secondaryConnected
-          ? '第二个 MT5 实例已授权成功；EA 快照会继续同步。'
-          : secondaryConnectionHint(secondary),
-    },
+    ...(!secondaryDisabled
+      ? [
+          {
+            label: '第二账号状态',
+            value: secondaryConnected
+              ? `${maskAccountLogin(secondary.login)} / ${secondary.server}`
+              : '已启用 / 未连接',
+            status: secondaryConnected ? 'ok' : 'blocked',
+            hint: secondaryConnected
+              ? '第二个 MT5 实例已授权成功；EA 快照会继续同步。'
+              : secondaryConnectionHint(secondary),
+          },
+        ]
+      : []),
     {
       label: '凭据边界',
       value: '前端不读取或保存密码',

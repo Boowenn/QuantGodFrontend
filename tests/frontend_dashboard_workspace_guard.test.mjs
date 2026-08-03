@@ -81,3 +81,16 @@ test('Dashboard uses a coalesced lightweight readonly refresh on timer and visib
   assert.match(workspace, /window\.setInterval\(refreshReadonlyWhenVisible, DASHBOARD_READONLY_REFRESH_MS\)/);
   assert.match(workspace, /document\.removeEventListener\('visibilitychange', handleVisibilityChange\)/);
 });
+
+test('single-account Dashboard hides secondary-only labels and raw snapshot evidence', () => {
+  const workspace = fs.readFileSync(
+    new URL('../src/workspaces/dashboard/DashboardWorkspace.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(
+    workspace,
+    /snapshot\.secondaryEnabled\s*\?\s*'只核对 USDJPY MT5 主账号与外汇部署账号'\s*:\s*'只核对 USDJPY MT5 主账号'/,
+  );
+  assert.match(workspace, /<JsonPreview\s+v-if="snapshot\.secondaryEnabled"\s+title="第二 MT5 快照"/);
+});

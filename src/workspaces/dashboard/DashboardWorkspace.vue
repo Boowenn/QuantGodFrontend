@@ -110,7 +110,13 @@
               <p class="qg-eyebrow">数据源诊断</p>
               <h2>运行快照恢复优先级</h2>
             </div>
-            <span class="qg-muted">只核对 USDJPY MT5 主账号与外汇部署账号</span>
+            <span class="qg-muted">
+              {{
+                snapshot.secondaryEnabled
+                  ? '只核对 USDJPY MT5 主账号与外汇部署账号'
+                  : '只核对 USDJPY MT5 主账号'
+              }}
+            </span>
           </div>
           <LedgerTable title="运行数据源" :rows="runtimeSourceRows" :limit="6" />
         </section>
@@ -296,6 +302,7 @@
         />
         <JsonPreview title="MT5 快照" source="/api/mt5-readonly/snapshot" :payload="state.mt5Snapshot" />
         <JsonPreview
+          v-if="snapshot.secondaryEnabled"
           title="第二 MT5 快照"
           source="/api/mt5-readonly-secondary/snapshot"
           :payload="state.secondaryMt5Snapshot"

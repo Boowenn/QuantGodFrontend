@@ -113,6 +113,17 @@ test('MT5 workspace coalesces refreshes and refreshes immediately when visible a
   assert.match(source, /document\.removeEventListener\('visibilitychange', handleVisibilityChange\)/);
 });
 
+test('single-account MT5 view hides secondary-only panels while retaining dual-account rendering', () => {
+  const source = fs.readFileSync(new URL('../src/workspaces/mt5/Mt5Workspace.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /:title="snapshot\.secondaryEnabled \? '双账号槽位与只读桥' : '主账号与只读桥'"/);
+  assert.match(
+    source,
+    /<section v-if="snapshot\.secondaryEnabled" class="qg-section-card">\s*<header>\s*<p class="qg-eyebrow">第二账号快照<\/p>/,
+  );
+  assert.match(source, /<JsonPreview\s+v-if="snapshot\.secondaryEnabled"\s+title="第二账号信息"/);
+});
+
 test('rejects direct fetch in MT5 workspace', () => {
   const root = makeProject({
     ...validFiles,

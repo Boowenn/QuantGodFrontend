@@ -74,18 +74,21 @@
             <h2>当前账号数据是否可信</h2>
           </header>
           <LedgerTable
-            title="双账号槽位与只读桥"
+            :title="snapshot.secondaryEnabled ? '双账号槽位与只读桥' : '主账号与只读桥'"
             :rows="snapshotRecoveryRows"
             :limit="4"
             class="qg-ledger-table--important qg-ledger-table--mt5-full"
           />
         </section>
 
-        <section class="qg-mt5-dual-accounts" aria-label="MT5 双账号槽位状态">
+        <section
+          class="qg-mt5-dual-accounts"
+          :aria-label="snapshot.secondaryEnabled ? 'MT5 双账号槽位状态' : 'MT5 主账号状态'"
+        >
           <header class="qg-mt5-dual-accounts__header">
             <div>
               <p class="qg-eyebrow">账户详情</p>
-              <h2>双账号槽位概览</h2>
+              <h2>{{ snapshot.secondaryEnabled ? '双账号槽位概览' : '主账号概览' }}</h2>
             </div>
             <StatusPill :status="runtimeSummaryStatus" :label="runtimeSummaryLabel" />
           </header>
@@ -217,7 +220,7 @@
             <KeyValueList :items="accountItems" />
           </section>
 
-          <section class="qg-section-card">
+          <section v-if="snapshot.secondaryEnabled" class="qg-section-card">
             <header>
               <p class="qg-eyebrow">第二账号快照</p>
               <h2>第二账号账户快照</h2>
@@ -304,6 +307,7 @@
         <JsonPreview title="连接状态" source="/api/mt5-readonly/status" :payload="state.status" />
         <JsonPreview title="账户信息" source="/api/mt5-readonly/account" :payload="state.account" />
         <JsonPreview
+          v-if="snapshot.secondaryEnabled"
           title="第二账号信息"
           source="/api/mt5-readonly-secondary/account"
           :payload="state.secondaryAccount"
@@ -313,6 +317,7 @@
         <JsonPreview title="品种登记" source="/api/mt5-symbol-registry/symbols" :payload="state.symbols" />
         <JsonPreview title="MT5 快照" source="/api/mt5-readonly/snapshot" :payload="state.snapshot" />
         <JsonPreview
+          v-if="snapshot.secondaryEnabled"
           title="第二 MT5 快照"
           source="/api/mt5-readonly-secondary/snapshot"
           :payload="state.secondarySnapshot"
