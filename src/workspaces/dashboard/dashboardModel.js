@@ -33,6 +33,57 @@ function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function diskMaintenanceHint(disk = {}) {
+  const maintenance = isObject(disk.maintenance) ? disk.maintenance : null;
+  if (!maintenance) return '';
+
+  const status = String(maintenance.status || maintenance.resultStatus || '').trim();
+  const statusLabel =
+    {
+      SUCCESS: '完成',
+      PASS: '通过',
+      PRESSURE_REMAINS: '压力未解除',
+      PARTIAL: '部分完成',
+      ERROR: '失败',
+      UNAVAILABLE: '不可用',
+    }[status.toUpperCase()] || status;
+  const generatedAt = String(maintenance.generatedAtIso || maintenance.generatedAt || '').trim();
+  const freshness = String(maintenance.freshness || '')
+    .trim()
+    .toUpperCase();
+  const summary = isObject(maintenance.summary) ? maintenance.summary : {};
+  const deletedBytes = numberOrNull(
+    summary.deletedBytes ?? maintenance.deletedBytes ?? maintenance.freedBytes,
+  );
+  const remainingBytes = numberOrNull(maintenance.pressureRemainingBytes ?? maintenance.remainingBytes);
+  const parts = [];
+
+  if (generatedAt) parts.push(`最近维护 ${generatedAt}`);
+  if (statusLabel) parts.push(`结果 ${statusLabel}`);
+  if (deletedBytes !== null) {
+    parts.push(`释放 ${(Math.max(0, deletedBytes) / (1024 * 1024)).toFixed(1)} MiB`);
+  }
+  const maintenanceIsStale = freshness === 'STALE';
+  if (maintenanceIsStale) {
+    parts.push('维护状态已过期');
+  }
+  if (maintenance.pressureActive === true) {
+    parts.push(maintenanceIsStale ? '上次维护时磁盘压力仍在' : '磁盘压力仍在');
+  } else if (maintenance.pressureActive === false) {
+    parts.push(maintenanceIsStale ? '上次维护时磁盘压力已解除' : '磁盘压力已解除');
+  }
+  if (maintenance.pressureActive === true && remainingBytes !== null) {
+    parts.push(
+      `${maintenanceIsStale ? '上次维护时距离目标还差' : '距离目标还差'} ${(
+        Math.max(0, remainingBytes) /
+        (1024 * 1024)
+      ).toFixed(1)} MiB`,
+    );
+  }
+
+  return parts.join(' · ');
+}
+
 const DASHBOARD_STATUS_FIELDS = [
   ['overallStatus', 'overallStatusZh'],
   ['readinessStatus', 'readinessStatusZh'],
@@ -311,7 +362,7 @@ function readonlyConnectionState(value = {}) {
     connection.processRunning === true &&
     connection.readReady !== false,
   );
-  let label = '连接状态未知';
+  let label;
   if (!known) label = '连接证据未知';
   else if (known && connection.processRunning === false) label = '终端进程未就绪';
   else if (known && connection.brokerSessionConnected === false) label = 'Broker 未连接';
@@ -573,6 +624,7 @@ export function buildOperatorOverviewItems(snapshot = {}) {
   const marketClosed = String(mt5.marketSession?.state || '').toUpperCase() === 'CLOSED';
   const root = overview.canonicalDataRoot || {};
   const diskFreeRatio = numberOrNull(overview.disk?.freeRatio);
+  const maintenanceHint = diskMaintenanceHint(overview.disk);
   return [
     {
       label: '统一运营状态',
@@ -659,6 +711,7 @@ export function buildOperatorOverviewItems(snapshot = {}) {
           ? overview.disk?.status || 'UNKNOWN'
           : `${overview.disk?.status || 'UNKNOWN'} · ${(diskFreeRatio * 100).toFixed(1)}% 空闲`,
       status: overview.disk?.status === 'PASS' ? 'ok' : overview.disk?.status === 'WARN' ? 'warn' : 'blocked',
+      ...(maintenanceHint ? { hint: maintenanceHint } : {}),
     },
     {
       label: '安全边界',

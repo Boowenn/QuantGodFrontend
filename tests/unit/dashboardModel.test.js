@@ -692,6 +692,98 @@ describe('Forex-only dashboard model', () => {
     });
   });
 
+  it('keeps the running-disk item unchanged when maintenance evidence is absent', () => {
+    const snapshot = normalizeDashboardSnapshot({ operatorOverview: operatorOverview() });
+    const diskItem = buildOperatorOverviewItems(snapshot).find((item) => item.label === '运行磁盘');
+
+    expect(diskItem).toEqual({
+      label: '运行磁盘',
+      value: 'PASS · 50.0% 空闲',
+      status: 'ok',
+    });
+  });
+
+  it('shows the latest maintenance result and remaining pressure for a CRITICAL disk', () => {
+    const snapshot = normalizeDashboardSnapshot({
+      operatorOverview: operatorOverview({
+        disk: {
+          available: true,
+          freeRatio: 0.09,
+          status: 'CRITICAL',
+          maintenance: {
+            status: 'PRESSURE_REMAINS',
+            generatedAtIso: '2026-08-06T00:33:54Z',
+            summary: { deletedBytes: 12.5 * 1024 * 1024 },
+            pressureActive: true,
+            pressureRemainingBytes: 64 * 1024 * 1024,
+          },
+        },
+        operationalReady: false,
+        overallStatus: 'BLOCKED',
+        blockedReasons: ['DISK_CRITICAL'],
+      }),
+    });
+    const diskItem = buildOperatorOverviewItems(snapshot).find((item) => item.label === '运行磁盘');
+
+    expect(diskItem).toMatchObject({
+      value: 'CRITICAL · 9.0% 空闲',
+      status: 'blocked',
+      hint: '最近维护 2026-08-06T00:33:54Z · 结果 压力未解除 · 释放 12.5 MiB · 磁盘压力仍在 · 距离目标还差 64.0 MiB',
+    });
+  });
+
+  it('accepts maintenance field aliases for a WARN disk', () => {
+    const snapshot = normalizeDashboardSnapshot({
+      operatorOverview: operatorOverview({
+        disk: {
+          available: true,
+          freeRatio: 0.15,
+          status: 'WARN',
+          maintenance: {
+            resultStatus: 'PASS',
+            generatedAt: '2026-08-06T01:33:54Z',
+            freedBytes: 3 * 1024 * 1024,
+            pressureActive: false,
+            remainingBytes: 0,
+          },
+        },
+        overallStatus: 'WARN',
+      }),
+    });
+    const diskItem = buildOperatorOverviewItems(snapshot).find((item) => item.label === '运行磁盘');
+
+    expect(diskItem).toMatchObject({
+      value: 'WARN · 15.0% 空闲',
+      status: 'warn',
+      hint: '最近维护 2026-08-06T01:33:54Z · 结果 通过 · 释放 3.0 MiB · 磁盘压力已解除',
+    });
+  });
+
+  it('marks stale maintenance and omits remaining pressure text when no remaining bytes exist', () => {
+    const snapshot = normalizeDashboardSnapshot({
+      operatorOverview: operatorOverview({
+        disk: {
+          available: true,
+          freeRatio: 0.18,
+          status: 'WARN',
+          maintenance: {
+            status: 'PASS',
+            generatedAtIso: '2026-08-06T02:33:54Z',
+            deletedBytes: 1024 * 1024,
+            freshness: 'STALE',
+            pressureActive: false,
+          },
+        },
+        overallStatus: 'WARN',
+      }),
+    });
+    const diskItem = buildOperatorOverviewItems(snapshot).find((item) => item.label === '运行磁盘');
+
+    expect(diskItem.hint).toBe(
+      '最近维护 2026-08-06T02:33:54Z · 结果 通过 · 释放 1.0 MiB · 维护状态已过期 · 上次维护时磁盘压力已解除',
+    );
+  });
+
   it('does not let healthy detail endpoints mask an overview request failure or malformed payload', () => {
     const failed = {
       ok: false,
